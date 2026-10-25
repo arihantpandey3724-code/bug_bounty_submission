@@ -1,0 +1,69 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+model Team {
+  id                String               @id @default(cuid())
+  name              String               @unique
+  email             String               @unique
+  totalScore        Int                  @default(0)
+  validBugsCount    Int                  @default(0)
+  hasMilestoneBonus Boolean              @default(false)
+  createdAt         DateTime             @default(now())
+  submissions       RegularSubmission[]
+  claimedTreasures  TreasureBug[]
+}
+
+model MasterBug {
+  id               String               @id // e.g., "EASY-01", "MED-03", "HARD-01"
+  title            String
+  category         String               // "EASY", "MEDIUM", "HARD"
+  basePoints       Int                  // Easy: 3, Med: 5, Hard: 10
+  speedBonusPoints Int                  // Easy: 2, Med: 5, Hard: 10
+  expected         String               @db.Text
+  actual           String               @db.Text
+  location         String
+  isFirstFound     Boolean              @default(false)
+  firstFoundById   String?
+  submissions      RegularSubmission[]
+}
+
+model RegularSubmission {
+  id             String     @id @default(cuid())
+  teamId         String
+  team           Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  description    String?    @db.Text
+  codeSnippet    String?    @db.Text
+  screenshotUrl  String?    @db.Text
+  status         String     @default("UNVERIFIED") // "VERIFIED", "REJECTED", "UNVERIFIED"
+  matchedBugId   String?
+  matchedBug     MasterBug? @relation(fields: [matchedBugId], references: [id])
+  awardedPoints  Int        @default(0)
+  isSpeedBonus   Boolean    @default(false)
+  llmConfidence  Float?
+  llmReasoning   String?    @db.Text
+  judgeOverride  Boolean    @default(false)
+  createdAt      DateTime   @default(now())
+}
+
+model TreasureBug {
+  id              Int       @id // 1 to 10
+  code            String    @unique
+  isClaimed       Boolean   @default(false)
+  claimedByTeamId String?
+  claimedByTeam   Team?     @relation(fields: [claimedByTeamId], references: [id])
+  claimedAt       DateTime?
+}
+
+model MilestoneTracker {
+  id              Int       @id @default(1)
+  awardedToTeamId String?
+  awardedAt       DateTime?
+}
