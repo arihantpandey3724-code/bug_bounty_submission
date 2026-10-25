@@ -1,7 +1,18 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Trophy, RefreshCw, Zap, Sparkles, Award, Info } from "lucide-react";
+import {
+  Trophy,
+  RefreshCw,
+  Zap,
+  Sparkles,
+  Award,
+  Info,
+  Target,
+  CheckCircle2,
+  ShieldCheck,
+  AlertTriangle,
+} from "lucide-react";
 
 interface LeaderboardTeam {
   rank: number;
@@ -99,31 +110,7 @@ export default function LeaderboardPage() {
         </div>
       </div>
 
-      {/* Formal Competition Guidelines & Scoring Notice */}
-      <div className="bg-white border border-neutral-200 rounded-lg p-5 sm:p-6 shadow-xs space-y-3 font-sans">
-        <div className="flex items-center space-x-2 text-neutral-900 border-b border-neutral-100 pb-3">
-          <Info className="w-5 h-5 text-neutral-700 flex-shrink-0" />
-          <h2 className="text-sm sm:text-base font-bold tracking-tight">
-            Important Scoring Guidelines & Leaderboard Notice
-          </h2>
-        </div>
-        <ul className="text-xs sm:text-sm text-neutral-700 space-y-2.5 list-disc pl-5 leading-relaxed">
-          <li>
-            <strong>Tentative Standings:</strong> The leaderboard scores and team rankings displayed here are real-time and provisional. As submissions undergo continuous evaluation and manual audit by the judging panel, team scores may be revised upwards or downwards upon final review.
-          </li>
-          <li>
-            <strong>Score Inquiries & Clarifications:</strong> Teams are welcome to approach the judging panel at any time during the event to seek clarification or request an audit on the evaluation status of any submitted bug report.
-          </li>
-          <li>
-            <strong>Zero Negative Marking:</strong> There are no negative score deductions or penalties for filing invalid, duplicated, or rejected reports.
-          </li>
-          <li>
-            <strong>Maximize Your Submissions:</strong> Participants are strongly advised to report every anomaly, defect, or unexpected behavior observed across the application. Submitting as many distinct bug reports as possible significantly maximizes your opportunity to earn base points, capture first-to-find speed bonuses, and unlock the 10-bug milestone award (+10 points).
-          </li>
-        </ul>
-      </div>
-
-      {/* Leaderboard Table */}
+      {/* Primary Focus: Live Leaderboard Table */}
       <div className="bg-white border border-neutral-200 rounded-lg overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm font-sans border-collapse">
@@ -206,6 +193,139 @@ export default function LeaderboardPage() {
         <div className="p-3.5 bg-neutral-50/70 border-t border-neutral-100 flex items-center justify-between text-xs font-sans text-neutral-500">
           <span>Tie-breaker: Highest valid bug count, followed by earliest submission time.</span>
           <span>Last refreshed: {lastUpdated || "Live"}</span>
+        </div>
+      </div>
+
+      {/* Official Rule Book & Competition Guidelines (Positioned Below Leaderboard) */}
+      <div className="space-y-4 pt-2 font-sans">
+        {/* Section Header */}
+        <div className="flex items-center space-x-2 text-neutral-900">
+          <Info className="w-5 h-5 text-neutral-700 flex-shrink-0" />
+          <h2 className="text-base font-bold tracking-tight">
+            Official Event Guidelines & Rule Book
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Card 1: Official Scoring Matrix (Rule 3.2 & 3.4) */}
+          <div className="bg-white border border-neutral-200 rounded-lg p-5 shadow-xs space-y-3">
+            <div className="flex items-center space-x-2 text-neutral-900 border-b border-neutral-100 pb-2">
+              <Target className="w-4 h-4 text-neutral-700" />
+              <h3 className="text-sm font-bold">1. Official Scoring Matrix (Rule 3.2)</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-sans border-collapse">
+                <thead>
+                  <tr className="border-b border-neutral-200 text-neutral-500 font-semibold">
+                    <th className="py-1.5 px-2">Tier</th>
+                    <th className="py-1.5 px-2">Base</th>
+                    <th className="py-1.5 px-2">First-to-Find</th>
+                    <th className="py-1.5 px-2">Max</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100 text-neutral-800">
+                  <tr>
+                    <td className="py-1.5 px-2 font-semibold text-emerald-700">Easy Bugs</td>
+                    <td className="py-1.5 px-2">3 pts</td>
+                    <td className="py-1.5 px-2 text-amber-700 font-medium">+2 pts</td>
+                    <td className="py-1.5 px-2 font-semibold">5 pts</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 px-2 font-semibold text-amber-700">Medium Bugs</td>
+                    <td className="py-1.5 px-2">5 pts</td>
+                    <td className="py-1.5 px-2 text-amber-700 font-medium">+5 pts</td>
+                    <td className="py-1.5 px-2 font-semibold">10 pts</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 px-2 font-semibold text-rose-700">Hard Bugs</td>
+                    <td className="py-1.5 px-2">10 pts</td>
+                    <td className="py-1.5 px-2 text-amber-700 font-medium">+10 pts</td>
+                    <td className="py-1.5 px-2 font-semibold">20 pts</td>
+                  </tr>
+                  <tr className="bg-amber-50/50">
+                    <td className="py-1.5 px-2 font-semibold text-amber-900">Treasure Flags (10)</td>
+                    <td className="py-1.5 px-2 font-medium" colSpan={2}>Flat 10 pts • Rule of One</td>
+                    <td className="py-1.5 px-2 font-semibold">10 pts</td>
+                  </tr>
+                  <tr className="bg-neutral-50">
+                    <td className="py-1.5 px-2 font-semibold text-neutral-900">Milestone Award</td>
+                    <td className="py-1.5 px-2 font-medium" colSpan={2}>First team to 10 valid bugs</td>
+                    <td className="py-1.5 px-2 font-semibold">+10 pts</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-neutral-500 leading-normal">
+              * The first team to submit a valid report for any regular bug captures the First-to-Find Speed Bonus.
+            </p>
+          </div>
+
+          {/* Card 2: Submission Proof Requirements & Judging Criteria (Rule 3.3 & 4.1) */}
+          <div className="bg-white border border-neutral-200 rounded-lg p-5 shadow-xs space-y-3">
+            <div className="flex items-center space-x-2 text-neutral-900 border-b border-neutral-100 pb-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+              <h3 className="text-sm font-bold">2. Proof & Evaluation Criteria (Rule 4.1)</h3>
+            </div>
+            <ul className="text-xs text-neutral-700 space-y-2 list-disc pl-4 leading-relaxed">
+              <li>
+                <strong>Evidence Required (Rule 3.3):</strong> Submissions should include a screenshot (SS) showing the defect, a code/inspector snippet, and step-by-step reproduction instructions.
+              </li>
+              <li>
+                <strong>Validity:</strong> The issue must be a genuine defect within the mock e-commerce store and within competition scope.
+              </li>
+              <li>
+                <strong>Reproducibility:</strong> The judging panel must be able to independently reproduce the issue following your submitted steps.
+              </li>
+              <li>
+                <strong>Tentative Standings:</strong> Leaderboard scores are real-time and provisional. As submissions undergo continuous verification and audit, scores may be adjusted upwards or downwards upon final review.
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Card 3: Code of Conduct, Rules & Scoring Clarifications (Rule 4.2) */}
+        <div className="bg-white border border-neutral-200 rounded-lg p-5 shadow-xs space-y-3">
+          <div className="flex items-center space-x-2 text-neutral-900 border-b border-neutral-100 pb-2">
+            <ShieldCheck className="w-4 h-4 text-neutral-700" />
+            <h3 className="text-sm font-bold">3. Competition Rules & Code of Conduct (Rule 4.2)</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-neutral-700 leading-relaxed">
+            <div>
+              <span className="font-semibold text-emerald-800 block mb-1">✓ Permitted & Recommended:</span>
+              <ul className="space-y-1.5 list-disc pl-4">
+                <li>
+                  <strong>Zero Negative Marking:</strong> There are no point deductions or penalties for filing invalid, duplicate, or rejected reports.
+                </li>
+                <li>
+                  <strong>Maximize Submissions:</strong> Report every potential bug found to maximize your chances of securing base points, speed bonuses, and the milestone award.
+                </li>
+                <li>
+                  <strong>Score Clarifications:</strong> Teams are welcome to approach the judging panel at any time during the event to request review or clarification on any submission.
+                </li>
+                <li>
+                  <strong>Team Collaboration:</strong> Full collaboration within your registered team members is permitted.
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <span className="font-semibold text-rose-800 block mb-1">✕ Prohibited Actions:</span>
+              <ul className="space-y-1.5 list-disc pl-4">
+                <li>
+                  <strong>Manual Testing Only:</strong> Do not use automated vulnerability scanners, fuzzers, or brute-force tools.
+                </li>
+                <li>
+                  <strong>No Disruptive Attacks:</strong> Do not attempt Denial of Service (DoS) attacks, flood requests, or intentionally crash the server.
+                </li>
+                <li>
+                  <strong>No Cross-Team Sharing:</strong> Do not share bug details or flag tokens with competing teams.
+                </li>
+                <li>
+                  <strong>Scope Limit:</strong> Only the provided mock e-commerce store is in-scope.
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     </div>

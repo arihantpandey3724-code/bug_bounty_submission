@@ -72,8 +72,8 @@ export default function SubmitBugPage() {
       return;
     }
 
-    if (!description.trim() && !codeSnippet.trim() && !screenshotUrl) {
-      setErrorMsg("Please provide at least a description, code snippet, or screenshot.");
+    if (!description.trim()) {
+      setErrorMsg("Please provide a bug description and steps to reproduce.");
       return;
     }
 
@@ -120,7 +120,7 @@ export default function SubmitBugPage() {
           </h1>
         </div>
         <p className="text-sm text-neutral-600 font-sans">
-          Provide reproduction steps, code snippets, or screenshots so the judging panel can verify your finding.
+          Provide reproduction steps explaining what went wrong. Code snippets and screenshots are completely optional.
         </p>
       </div>
 
@@ -276,7 +276,7 @@ export default function SubmitBugPage() {
         {/* Action Button */}
         <div className="pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-neutral-200">
           <span className="text-xs font-sans text-neutral-500">
-            Make sure your description and reproduction steps are clear.
+            Note: Screenshots and code snippets are strictly optional. A clear description and reproduction steps are sufficient.
           </span>
           <button
             type="submit"

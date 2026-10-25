@@ -207,6 +207,7 @@ ${codeSnippet || "(No code snippet provided)"}
 1. Compare the reported issue against the 55 Master Bugs.
 2. Determine if this submission matches a specific Master Bug (e.g. "EASY-01", "MED-03", "HARD-01").
 3. Determine confidence score between 0.00 and 1.00.
+   CRITICAL REQUIREMENT: Screenshots and code snippets are strictly OPTIONAL for participants. If the participant's text description clearly details what occurred, where the defect happened, and reproduction steps matching one of the 55 Master Bugs, award high confidence (>= 0.85). Do NOT lower confidence or reject a submission merely because a screenshot or code snippet was not provided.
 4. Output strict JSON with these keys:
    {
      "matchedBugId": "EASY-01" | null,

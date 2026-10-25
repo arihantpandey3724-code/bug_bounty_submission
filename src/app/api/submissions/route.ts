@@ -120,9 +120,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "teamId is required" }, { status: 400 });
     }
 
-    if (!description && !codeSnippet && !screenshotUrl) {
+    if (!description || !description.trim()) {
       return NextResponse.json(
-        { error: "Please provide a description, code snippet, or screenshot." },
+        { error: "Bug description and reproduction steps are required." },
         { status: 400 }
       );
     }

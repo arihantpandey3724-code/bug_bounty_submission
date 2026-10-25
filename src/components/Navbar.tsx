@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTeam } from "@/context/TeamContext";
-import { Trophy, Bug, Sparkles, ListChecks, Shield, LogOut } from "lucide-react";
+import { Trophy, Bug, Sparkles, ListChecks, LogOut } from "lucide-react";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -81,20 +81,6 @@ export default function Navbar() {
                 Sign In
               </button>
             )}
-
-            <div className="h-5 w-[1px] bg-neutral-200 mx-1" />
-
-            <Link
-              href="/judge"
-              className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs sm:text-sm font-sans rounded-md transition-colors ${
-                pathname.startsWith("/judge")
-                  ? "bg-neutral-900 text-white font-medium"
-                  : "bg-neutral-50 text-neutral-700 hover:bg-neutral-100 border border-neutral-300"
-              }`}
-            >
-              <Shield className="w-3.5 h-3.5 text-neutral-500" />
-              <span>Judge Console</span>
-            </Link>
           </div>
         </div>
       </div>

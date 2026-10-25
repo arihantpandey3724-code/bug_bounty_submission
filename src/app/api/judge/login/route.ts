@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { JUDGE_PIN, getExpectedJudgeToken } from "@/lib/judgeAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -7,15 +8,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { pin } = body;
 
-    const validPin = process.env.JUDGE_PIN || "laal_wala_AngryBird";
-
-    if (pin === validPin) {
+    if (pin && typeof pin === "string" && pin.trim() === JUDGE_PIN.trim()) {
       const response = NextResponse.json({
         success: true,
         message: "Judge authentication granted.",
       });
 
-      response.cookies.set("judge_token", "entropy-judge-authorized", {
+      response.cookies.set("judge_token", getExpectedJudgeToken(), {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",

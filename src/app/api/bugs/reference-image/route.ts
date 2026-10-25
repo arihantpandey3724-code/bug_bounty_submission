@@ -14,6 +14,13 @@ function ensureRefDir() {
 }
 
 export async function GET(req: NextRequest) {
+  if (!isJudgeAuthorized(req)) {
+    return NextResponse.json(
+      { error: "Unauthorized: Judge authentication required to view reference screenshots." },
+      { status: 401 }
+    );
+  }
+
   ensureRefDir();
   const { searchParams } = new URL(req.url);
   const bugId = searchParams.get("bugId");

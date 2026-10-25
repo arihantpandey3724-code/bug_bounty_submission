@@ -27,20 +27,6 @@ export default function RootLayout({
           <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
             {children}
           </main>
-          <footer className="w-full bg-white border-t border-neutral-200 py-4 mt-auto font-sans">
-            <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between text-xs text-neutral-500 gap-2">
-              <div>
-                Entropy 2026 Bug Bounty Platform
-              </div>
-              <div className="flex items-center space-x-3 text-neutral-400">
-                <span>55 Target Bugs</span>
-                <span>•</span>
-                <span>10 Treasure Flags</span>
-                <span>•</span>
-                <span>Live Scoring</span>
-              </div>
-            </div>
-          </footer>
         </TeamProvider>
       </body>
     </html>
