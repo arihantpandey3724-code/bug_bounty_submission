@@ -9,6 +9,7 @@ import {
   Search,
   Save,
   AlertCircle,
+  Clock,
 } from "lucide-react";
 import { MASTER_BUGS } from "@/config/masterBugs";
 
@@ -261,7 +262,7 @@ export default function JudgePortalPage() {
 
   async function submitJudgeVerdict(
     submissionId: string,
-    verdict: "VERIFIED" | "REJECTED"
+    verdict: "VERIFIED" | "REJECTED" | "UNVERIFIED"
   ) {
     const form = judgeFormState[submissionId] || {
       matchedBugId: "",
@@ -474,7 +475,7 @@ export default function JudgePortalPage() {
                       : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
                   }`}
                 >
-                  {st}
+                  {st === "UNVERIFIED" ? "PENDING" : st}
                 </button>
               ))}
             </div>
@@ -675,18 +676,27 @@ export default function JudgePortalPage() {
                           />
                         </div>
 
-                        <div className="flex items-center space-x-2 pt-2">
+                        <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
                           <button
                             onClick={() => submitJudgeVerdict(sub.id, "VERIFIED")}
-                            className="flex-1 py-2 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs uppercase rounded-sm flex items-center justify-center space-x-1.5"
+                            className="w-full sm:flex-1 py-2 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs uppercase rounded-sm flex items-center justify-center space-x-1.5"
                           >
                             <CheckCircle2 className="w-4 h-4" />
-                            <span>VERIFY & AWARD</span>
+                            <span>{sub.status === "VERIFIED" ? "UPDATE VERIFIED" : "VERIFY & AWARD"}</span>
+                          </button>
+
+                          <button
+                            onClick={() => submitJudgeVerdict(sub.id, "UNVERIFIED")}
+                            className="w-full sm:w-auto px-3 py-2 bg-neutral-200 hover:bg-neutral-300 text-neutral-800 font-bold text-xs uppercase rounded-sm flex items-center justify-center space-x-1.5"
+                            title="Revert submission back to Pending status"
+                          >
+                            <Clock className="w-4 h-4" />
+                            <span>SET PENDING</span>
                           </button>
 
                           <button
                             onClick={() => submitJudgeVerdict(sub.id, "REJECTED")}
-                            className="flex-1 py-2 bg-neutral-800 hover:bg-rose-900 text-white font-bold text-xs uppercase rounded-sm flex items-center justify-center space-x-1.5"
+                            className="w-full sm:flex-1 py-2 bg-neutral-800 hover:bg-rose-900 text-white font-bold text-xs uppercase rounded-sm flex items-center justify-center space-x-1.5"
                           >
                             <XCircle className="w-4 h-4" />
                             <span>REJECT</span>

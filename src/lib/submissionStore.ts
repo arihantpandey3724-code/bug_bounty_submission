@@ -57,7 +57,7 @@ export function readDiskBackups(): SubmissionBackup[] {
       return [];
     }
     const content = fs.readFileSync(BACKUP_FILE, "utf8");
-    return content
+    const rawList = content
       .split("\n")
       .filter((line) => line.trim().length > 0)
       .map((line) => {
@@ -68,6 +68,13 @@ export function readDiskBackups(): SubmissionBackup[] {
         }
       })
       .filter((item): item is SubmissionBackup => item !== null);
+
+    // Deduplicate by ID so later append entries update earlier writes for the same submission
+    const map = new Map<string, SubmissionBackup>();
+    for (const item of rawList) {
+      map.set(item.id, item);
+    }
+    return Array.from(map.values());
   } catch (err) {
     console.error("[submissionStore] Error reading disk backups:", err);
     return [];

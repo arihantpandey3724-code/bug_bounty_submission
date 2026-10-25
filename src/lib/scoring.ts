@@ -83,13 +83,13 @@ export async function evaluateMilestoneBonus(teamId: string) {
  */
 export async function executeJudgeVerdict({
   submissionId,
-  status, // "VERIFIED" | "REJECTED"
+  status, // "VERIFIED" | "REJECTED" | "UNVERIFIED" | "PENDING"
   matchedBugId,
   overridePoints,
   judgeNotes,
 }: {
   submissionId: string;
-  status: "VERIFIED" | "REJECTED";
+  status: "VERIFIED" | "REJECTED" | "UNVERIFIED" | "PENDING";
   matchedBugId?: string | null;
   overridePoints?: number | null;
   judgeNotes?: string;
@@ -104,8 +104,9 @@ export async function executeJudgeVerdict({
   }
 
   const effectiveBugId = matchedBugId ?? submission.matchedBugId;
+  const targetStatus = status === "PENDING" ? "UNVERIFIED" : status;
 
-  if (status === "REJECTED") {
+  if (targetStatus === "REJECTED" || targetStatus === "UNVERIFIED") {
     // If was previously verified, subtract points
     let pointsToSubtract = 0;
     if (submission.status === "VERIFIED" && submission.awardedPoints > 0) {
@@ -123,16 +124,27 @@ export async function executeJudgeVerdict({
         });
       }
 
+      // If this submission had claimed the first-to-find speed bonus, release the lock on the master bug
+      if (submission.isSpeedBonus && submission.matchedBugId) {
+        await tx.masterBug.update({
+          where: { id: submission.matchedBugId },
+          data: {
+            isFirstFound: false,
+            firstFoundById: null,
+          },
+        });
+      }
+
       return tx.regularSubmission.update({
         where: { id: submissionId },
         data: {
-          status: "REJECTED",
+          status: targetStatus,
           awardedPoints: 0,
           isSpeedBonus: false,
           judgeOverride: true,
           matchedBugId: effectiveBugId,
           llmReasoning: judgeNotes
-            ? `[Judge Reject Note]: ${judgeNotes}`
+            ? `[Judge ${targetStatus === "REJECTED" ? "Rejected" : "Moved to Pending"}]: ${judgeNotes}`
             : submission.llmReasoning,
         },
       });

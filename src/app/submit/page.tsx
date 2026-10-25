@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useTeam } from "@/context/TeamContext";
-import { Bug, Upload, CheckCircle2, AlertCircle, FileCode2, Image as ImageIcon, X, ShieldCheck } from "lucide-react";
+import { Bug, Upload, AlertCircle, FileCode2, Image as ImageIcon, X } from "lucide-react";
 import Link from "next/link";
 
 export default function SubmitBugPage() {
@@ -114,13 +114,13 @@ export default function SubmitBugPage() {
       {/* Header */}
       <div className="border-b border-neutral-200 pb-4">
         <div className="flex items-center space-x-2.5 text-neutral-900 mb-1">
-          <Bug className="w-6 h-6" />
+          <Bug className="w-6 h-6 text-neutral-800" />
           <h1 className="text-2xl font-bold tracking-tight font-sans">
             Report a Bug
           </h1>
         </div>
         <p className="text-sm text-neutral-600 font-sans">
-          Submit reproduction steps, code evidence, or screenshots. Every report is permanently saved.
+          Provide reproduction steps, code snippets, or screenshots so the judging panel can verify your finding.
         </p>
       </div>
 
@@ -135,17 +135,17 @@ export default function SubmitBugPage() {
           </div>
           <button
             onClick={() => setIsAuthModalOpen(true)}
-            className="px-4 py-2 bg-neutral-900 text-white text-xs sm:text-sm font-mono font-bold rounded-sm hover:bg-neutral-800"
+            className="px-4 py-2 bg-neutral-900 text-white text-xs sm:text-sm font-sans font-medium rounded-md hover:bg-neutral-800 transition-colors"
           >
-            Sign In Team
+            Sign in
           </button>
         </div>
       ) : (
-        <div className="px-4 py-3 bg-neutral-100 border border-neutral-200 rounded-sm flex items-center justify-between text-sm font-mono">
+        <div className="px-4 py-3 bg-neutral-100 border border-neutral-200 rounded-md flex items-center justify-between text-sm font-sans">
           <div className="flex items-center space-x-2">
-            <span className="text-neutral-500">SUBMITTING AS:</span>
-            <span className="font-bold text-neutral-900 uppercase">{team.name}</span>
-            <span className="text-neutral-400">({team.email})</span>
+            <span className="text-neutral-500">Submitting as:</span>
+            <span className="font-semibold text-neutral-900">{team.name}</span>
+            <span className="text-neutral-500 text-xs">({team.email})</span>
           </div>
           <button
             onClick={() => setIsAuthModalOpen(true)}
@@ -158,31 +158,28 @@ export default function SubmitBugPage() {
 
       {/* Success Notification */}
       {submittedResult && (
-        <div className="p-5 bg-neutral-900 text-white rounded-md space-y-3 font-mono text-sm">
-          <div className="flex items-center space-x-2 text-emerald-400 font-bold">
-            <CheckCircle2 className="w-5 h-5" />
-            <span>REPORT RECEIVED & QUEUED FOR REVIEW</span>
-          </div>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-neutral-800 pt-3 text-xs text-neutral-300">
+        <div className="p-5 bg-neutral-50 border border-neutral-200 rounded-lg space-y-3 font-sans text-sm shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
             <div>
-              <span className="text-neutral-400 font-bold">REFERENCE ID: </span>
-              <span className="text-white font-bold">{submittedResult.id}</span>
+              <h3 className="text-base font-semibold text-neutral-900">
+                Bug report submitted successfully
+              </h3>
+              <p className="text-sm text-neutral-600 mt-0.5">
+                The judges have received your report and will review your reproduction steps shortly.
+              </p>
             </div>
-            <div className="flex items-center space-x-1 text-emerald-400">
-              <ShieldCheck className="w-4 h-4" />
-              <span>Permanently recorded and stored.</span>
-            </div>
-          </div>
-          <div className="pt-2 flex items-center justify-between text-xs border-t border-neutral-800/60">
-            <span className="text-neutral-400 font-sans">
-              Your report is under review by the judges.
-            </span>
             <Link
               href="/my-submissions"
-              className="text-emerald-400 hover:underline font-bold"
+              className="px-3.5 py-1.5 text-xs font-medium text-neutral-900 bg-white border border-neutral-300 hover:bg-neutral-100 rounded-md transition-colors flex-shrink-0 self-start"
             >
-              View My Submissions →
+              View your submissions →
             </Link>
+          </div>
+          <div className="pt-2.5 border-t border-neutral-200/80 flex items-center text-xs text-neutral-500">
+            <span>Reference ID:</span>
+            <code className="ml-1.5 px-2 py-0.5 bg-neutral-200/60 text-neutral-700 rounded font-mono text-[11px]">
+              {submittedResult.id}
+            </code>
           </div>
         </div>
       )}
@@ -203,7 +200,7 @@ export default function SubmitBugPage() {
       >
         {/* Description */}
         <div>
-          <label className="block text-sm font-mono font-bold uppercase tracking-wider text-neutral-800 mb-1.5">
+          <label className="block text-sm font-sans font-semibold text-neutral-800 mb-1.5">
             Bug Description & Steps to Reproduce <span className="text-rose-500">*</span>
           </label>
           <textarea
@@ -212,36 +209,36 @@ export default function SubmitBugPage() {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Explain where the bug occurred, what steps you took, and what went wrong..."
-            className="w-full p-3.5 text-sm sm:text-base bg-neutral-50 border border-neutral-300 rounded-sm focus:outline-none focus:border-neutral-900 font-sans"
+            className="w-full p-3.5 text-sm sm:text-base bg-neutral-50 border border-neutral-300 rounded-md focus:outline-none focus:border-neutral-900 font-sans"
           />
         </div>
 
         {/* Code Snippet */}
         <div>
-          <label className="block text-sm font-mono font-bold uppercase tracking-wider text-neutral-800 mb-1.5 flex items-center space-x-2">
-            <FileCode2 className="w-4 h-4" />
-            <span>Code / Network Snippet (Optional)</span>
+          <label className="block text-sm font-sans font-semibold text-neutral-800 mb-1.5 flex items-center space-x-2">
+            <FileCode2 className="w-4 h-4 text-neutral-600" />
+            <span>Code or Console Snippet (Optional)</span>
           </label>
           <textarea
             rows={4}
             value={codeSnippet}
             onChange={(e) => setCodeSnippet(e.target.value)}
             placeholder="Paste relevant HTML, payload, or inspector code..."
-            className="w-full p-3.5 text-sm bg-neutral-950 text-neutral-100 border border-neutral-800 rounded-sm focus:outline-none font-mono"
+            className="w-full p-3.5 text-sm bg-neutral-950 text-neutral-100 border border-neutral-800 rounded-md focus:outline-none font-mono"
           />
         </div>
 
         {/* Screenshot */}
         <div>
-          <label className="block text-sm font-mono font-bold uppercase tracking-wider text-neutral-800 mb-1.5 flex items-center space-x-2">
-            <ImageIcon className="w-4 h-4" />
+          <label className="block text-sm font-sans font-semibold text-neutral-800 mb-1.5 flex items-center space-x-2">
+            <ImageIcon className="w-4 h-4 text-neutral-600" />
             <span>Screenshot Proof (Optional)</span>
           </label>
 
           {screenshotUrl ? (
-            <div className="border border-neutral-300 rounded-sm p-3 bg-neutral-50">
+            <div className="border border-neutral-300 rounded-md p-3 bg-neutral-50">
               <div className="flex items-center justify-between mb-2 pb-1 border-b border-neutral-200">
-                <span className="text-xs font-mono font-bold text-neutral-700">IMAGE ATTACHED</span>
+                <span className="text-xs font-sans font-medium text-neutral-700">Image attached</span>
                 <button
                   type="button"
                   onClick={() => setScreenshotUrl(null)}
@@ -258,13 +255,13 @@ export default function SubmitBugPage() {
               />
             </div>
           ) : (
-            <label className="border-2 border-dashed border-neutral-300 hover:border-neutral-500 rounded-sm p-6 flex flex-col items-center justify-center cursor-pointer transition-colors bg-neutral-50/50">
+            <label className="border-2 border-dashed border-neutral-300 hover:border-neutral-500 rounded-md p-6 flex flex-col items-center justify-center cursor-pointer transition-colors bg-neutral-50/50">
               <Upload className="w-6 h-6 text-neutral-400 mb-2" />
-              <span className="text-sm font-mono text-neutral-800 font-bold">
-                Upload Screenshot or Paste (Ctrl + V)
+              <span className="text-sm font-sans text-neutral-800 font-medium">
+                Upload screenshot or paste from clipboard (Ctrl + V)
               </span>
               <span className="text-xs text-neutral-500 mt-1">
-                PNG, JPG, or WEBP up to 5MB (or press Ctrl+V anywhere)
+                PNG, JPG, or WEBP up to 5MB
               </span>
               <input
                 type="file"
@@ -278,16 +275,15 @@ export default function SubmitBugPage() {
 
         {/* Action Button */}
         <div className="pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-neutral-200">
-          <span className="text-xs font-mono text-neutral-500 flex items-center space-x-1">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Submissions are permanently recorded.</span>
+          <span className="text-xs font-sans text-neutral-500">
+            Make sure your description and reproduction steps are clear.
           </span>
           <button
             type="submit"
             disabled={isSubmitting || !team}
-            className="px-6 py-3 bg-neutral-900 text-white text-sm font-mono font-bold tracking-wider uppercase hover:bg-neutral-800 disabled:opacity-50 rounded-sm transition-colors shadow-sm"
+            className="px-6 py-2.5 bg-neutral-900 text-white text-sm font-sans font-medium hover:bg-neutral-800 disabled:opacity-50 rounded-md transition-colors shadow-sm"
           >
-            {isSubmitting ? "SAVING..." : "SUBMIT BUG REPORT"}
+            {isSubmitting ? "Submitting..." : "Submit Bug Report"}
           </button>
         </div>
       </form>

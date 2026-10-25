@@ -4,6 +4,8 @@ import { evaluateSubmissionWithAI } from "@/lib/gemini";
 import { appendToDiskBackup } from "@/lib/submissionStore";
 import localStore from "@/lib/localStore";
 import { isJudgeAuthorized } from "@/lib/judgeAuth";
+import { calculateRegularPoints, evaluateMilestoneBonus } from "@/lib/scoring";
+import { MASTER_BUGS } from "@/config/masterBugs";
 
 export const dynamic = "force-dynamic";
 
@@ -164,30 +166,70 @@ export async function POST(req: NextRequest) {
       console.warn("[api/submissions] AI evaluation error:", evalErr);
     }
 
-    // 3. Persist to PostgreSQL if available
+    // 3. Auto-Verification Threshold: If AI confidence is >= 80% (0.80) and matched a bug
+    const isAutoVerified =
+      Boolean(aiResult.matchedBugId) &&
+      typeof aiResult.confidence === "number" &&
+      aiResult.confidence >= 0.8;
+
+    const targetStatus: "VERIFIED" | "UNVERIFIED" = isAutoVerified ? "VERIFIED" : "UNVERIFIED";
+    let awardedPoints = 0;
+    let isSpeedBonus = false;
+
+    // 4. Persist to PostgreSQL if available
     try {
       const dbTeam = await prisma.team.findUnique({
         where: { id: teamId },
       });
 
       if (dbTeam) {
-        const dbSubmission = await prisma.regularSubmission.create({
+        if (isAutoVerified && aiResult.matchedBugId) {
+          const bug = await prisma.masterBug.findUnique({
+            where: { id: aiResult.matchedBugId },
+          });
+
+          if (bug) {
+            if (!bug.isFirstFound) {
+              isSpeedBonus = true;
+              await prisma.masterBug.update({
+                where: { id: aiResult.matchedBugId },
+                data: {
+                  isFirstFound: true,
+                  firstFoundById: teamId,
+                },
+              });
+            }
+            awardedPoints = calculateRegularPoints(bug.category, isSpeedBonus);
+          } else {
+            awardedPoints = 3;
+          }
+
+          // Credit team score and valid bug count
+          await prisma.team.update({
+            where: { id: teamId },
+            data: {
+              totalScore: { increment: awardedPoints },
+              validBugsCount: { increment: 1 },
+            },
+          });
+
+          // Check for 10-bug milestone award (+10 pts)
+          await evaluateMilestoneBonus(teamId);
+        }
+
+        await prisma.regularSubmission.create({
           data: {
             id: submissionId,
             teamId,
             description: initialRecord.description,
             codeSnippet: initialRecord.codeSnippet || null,
             screenshotUrl: initialRecord.screenshotUrl || null,
-            status: "UNVERIFIED",
+            status: targetStatus,
             matchedBugId: aiResult.matchedBugId,
             llmConfidence: aiResult.confidence,
             llmReasoning: aiResult.reasoning,
-            awardedPoints: 0,
-            isSpeedBonus: false,
-          },
-          include: {
-            team: true,
-            matchedBug: true,
+            awardedPoints,
+            isSpeedBonus,
           },
         });
 
@@ -196,17 +238,31 @@ export async function POST(req: NextRequest) {
           submission: {
             id: submissionId,
             teamId,
-            status: "UNVERIFIED",
+            status: targetStatus,
             createdAt: initialRecord.createdAt,
           },
-          message: "Report received and queued for review.",
+          message: isAutoVerified
+            ? "Report verified and points awarded!"
+            : "Report received and queued for review.",
         });
       }
     } catch (dbErr) {
       console.warn("[api/submissions] Database offline locally, served via disk store.");
     }
 
-    // 4. Fallback to Local Store with disk persistence
+    // 5. Fallback to Local Store with disk persistence
+    if (isAutoVerified && aiResult.matchedBugId) {
+      const bug = localStore.getBug(aiResult.matchedBugId);
+      if (bug) {
+        if (!bug.isFirstFound) {
+          isSpeedBonus = true;
+        }
+        awardedPoints = bug.basePoints + (isSpeedBonus ? bug.speedBonusPoints : 0);
+      } else {
+        awardedPoints = 3;
+      }
+    }
+
     localStore.createSubmission({
       teamId,
       description: initialRecord.description,
@@ -215,6 +271,9 @@ export async function POST(req: NextRequest) {
       matchedBugId: aiResult.matchedBugId,
       llmConfidence: aiResult.confidence,
       llmReasoning: aiResult.reasoning,
+      status: targetStatus,
+      awardedPoints,
+      isSpeedBonus,
     });
 
     return NextResponse.json({
@@ -222,10 +281,12 @@ export async function POST(req: NextRequest) {
       submission: {
         id: submissionId,
         teamId,
-        status: "UNVERIFIED",
+        status: targetStatus,
         createdAt: initialRecord.createdAt,
       },
-      message: "Report received and queued for review.",
+      message: isAutoVerified
+        ? "Report verified and points awarded!"
+        : "Report received and queued for review.",
     });
   } catch (err: any) {
     return NextResponse.json(

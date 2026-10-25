@@ -213,9 +213,15 @@ class LocalStore {
     matchedBugId?: string | null;
     llmConfidence?: number | null;
     llmReasoning?: string | null;
+    status?: string;
+    awardedPoints?: number;
+    isSpeedBonus?: boolean;
   }) {
     const team = this.findTeamById(data.teamId);
     const id = `sub-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const status = data.status || "UNVERIFIED";
+    const awardedPoints = data.awardedPoints || 0;
+    const isSpeedBonus = Boolean(data.isSpeedBonus);
 
     const submission = {
       id,
@@ -224,23 +230,39 @@ class LocalStore {
       description: data.description,
       codeSnippet: data.codeSnippet || undefined,
       screenshotUrl: data.screenshotUrl || undefined,
-      status: "UNVERIFIED",
+      status,
       matchedBugId: data.matchedBugId || null,
-      awardedPoints: 0,
-      isSpeedBonus: false,
+      awardedPoints,
+      isSpeedBonus,
       llmConfidence: data.llmConfidence || null,
       llmReasoning: data.llmReasoning || null,
       judgeOverride: false,
       createdAt: new Date().toISOString(),
     };
 
-    // Always append to disk backup
-    appendToDiskBackup(submission);
-
-    if (data.matchedBugId && this.bugs.has(data.matchedBugId)) {
+    if (status === "VERIFIED") {
+      if (data.matchedBugId && this.bugs.has(data.matchedBugId)) {
+        const b = this.bugs.get(data.matchedBugId)!;
+        b.totalReports += 1;
+        b.verifiedReports += 1;
+        if (isSpeedBonus) {
+          b.isFirstFound = true;
+          b.firstFoundById = data.teamId;
+          b.firstFoundByTeam = team?.name || "Team";
+        }
+      }
+      if (team) {
+        team.totalScore += awardedPoints;
+        team.validBugsCount += 1;
+        this.checkMilestone(team);
+      }
+    } else if (data.matchedBugId && this.bugs.has(data.matchedBugId)) {
       const b = this.bugs.get(data.matchedBugId)!;
       b.totalReports += 1;
     }
+
+    // Always append to disk backup
+    appendToDiskBackup(submission);
 
     return submission;
   }
@@ -264,7 +286,7 @@ class LocalStore {
 
   judgeSubmission(
     submissionId: string,
-    status: "VERIFIED" | "REJECTED",
+    status: "VERIFIED" | "REJECTED" | "UNVERIFIED" | "PENDING",
     matchedBugId?: string | null,
     overridePoints?: number | null,
     judgeNotes?: string
@@ -275,13 +297,30 @@ class LocalStore {
 
     const team = this.findTeamById(sub.teamId);
     const effBugId = matchedBugId || sub.matchedBugId;
+    const targetStatus = status === "PENDING" ? "UNVERIFIED" : status;
 
-    if (status === "REJECTED") {
-      sub.status = "REJECTED";
+    if (targetStatus === "REJECTED" || targetStatus === "UNVERIFIED") {
+      // Revert points if was previously verified
+      if (sub.status === "VERIFIED" && team && sub.awardedPoints > 0) {
+        team.totalScore = Math.max(0, team.totalScore - sub.awardedPoints);
+        team.validBugsCount = Math.max(0, team.validBugsCount - 1);
+      }
+
+      // Revert speed bonus on master bug if this sub was the first found
+      if (sub.isSpeedBonus && sub.matchedBugId && this.bugs.has(sub.matchedBugId)) {
+        const b = this.bugs.get(sub.matchedBugId)!;
+        b.isFirstFound = false;
+        b.firstFoundById = null;
+        b.firstFoundByTeam = null;
+      }
+
+      sub.status = targetStatus;
       sub.awardedPoints = 0;
       sub.isSpeedBonus = false;
       sub.judgeOverride = true;
-      if (judgeNotes) sub.llmReasoning = `[Judge Reject]: ${judgeNotes}`;
+      if (judgeNotes) {
+        sub.llmReasoning = `[Judge ${targetStatus === "REJECTED" ? "Rejected" : "Moved to Pending"}]: ${judgeNotes}`;
+      }
     } else {
       let isSpeed = false;
       let pts = 3;
@@ -300,6 +339,10 @@ class LocalStore {
         pts = b.basePoints + (isSpeed ? b.speedBonusPoints : 0);
       }
 
+      const prevPoints = sub.status === "VERIFIED" ? sub.awardedPoints : 0;
+      const pointDifference = pts - prevPoints;
+      const countInc = sub.status === "VERIFIED" ? 0 : 1;
+
       sub.status = "VERIFIED";
       sub.awardedPoints = pts;
       sub.isSpeedBonus = isSpeed;
@@ -308,8 +351,8 @@ class LocalStore {
       if (judgeNotes) sub.llmReasoning = `[Judge Approved]: ${judgeNotes}`;
 
       if (team) {
-        team.totalScore += pts;
-        team.validBugsCount += 1;
+        team.totalScore += pointDifference;
+        team.validBugsCount += countInc;
         this.checkMilestone(team);
       }
     }

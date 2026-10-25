@@ -77,16 +77,16 @@ export default function MySubmissionsPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div className="border border-neutral-200 bg-white p-6 rounded-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="border border-neutral-200 bg-white p-6 rounded-lg shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2.5 text-neutral-900 mb-1">
-            <ListChecks className="w-6 h-6" />
+            <ListChecks className="w-6 h-6 text-neutral-800" />
             <h1 className="text-2xl font-bold tracking-tight font-sans">
               Submissions: {team.name}
             </h1>
           </div>
-          <p className="text-sm text-neutral-600 font-mono">
-            {team.email} • Total Score: <strong>{team.totalScore} PTS</strong> • Valid Bugs: <strong>{team.validBugsCount}</strong>
+          <p className="text-sm text-neutral-600 font-sans">
+            {team.email} • Total Score: <strong className="text-neutral-900">{team.totalScore} pts</strong> • Verified Bugs: <strong className="text-neutral-900">{team.validBugsCount}</strong>
           </p>
         </div>
 
@@ -96,43 +96,43 @@ export default function MySubmissionsPage() {
               fetchSubmissions();
               refreshTeam();
             }}
-            className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-mono font-bold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-sm"
+            className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-sans font-medium text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-md transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            <span>REFRESH</span>
+            <span>Refresh</span>
           </button>
           <Link
             href="/submit"
-            className="px-4 py-2 text-xs font-mono font-bold text-white bg-neutral-900 hover:bg-neutral-800 rounded-sm"
+            className="px-4 py-2 text-xs font-sans font-medium text-white bg-neutral-900 hover:bg-neutral-800 rounded-md transition-colors"
           >
-            + NEW REPORT
+            + Report Bug
           </Link>
         </div>
       </div>
 
       {/* Stats Bar */}
-      <div className="grid grid-cols-3 gap-3 font-mono text-sm">
-        <div className="p-4 bg-white border border-neutral-200 rounded-sm">
-          <span className="text-xs text-neutral-500 uppercase block font-bold">Total Reports</span>
-          <span className="text-2xl font-extrabold text-neutral-900 mt-1 block">{submissions.length}</span>
+      <div className="grid grid-cols-3 gap-3 text-sm font-sans">
+        <div className="p-4 bg-white border border-neutral-200 rounded-lg shadow-xs">
+          <span className="text-xs text-neutral-500 font-medium block">Total Reports</span>
+          <span className="text-2xl font-bold text-neutral-900 mt-1 block">{submissions.length}</span>
         </div>
-        <div className="p-4 bg-white border border-neutral-200 rounded-sm">
-          <span className="text-xs text-emerald-700 uppercase block font-bold">Verified Bugs</span>
-          <span className="text-2xl font-extrabold text-emerald-700 mt-1 block">
-            {verifiedCount} {speedBonusCount > 0 ? <span className="text-sm text-amber-700 font-bold font-mono">({speedBonusCount} Speed)</span> : ""}
+        <div className="p-4 bg-white border border-neutral-200 rounded-lg shadow-xs">
+          <span className="text-xs text-emerald-700 font-medium block">Verified Bugs</span>
+          <span className="text-2xl font-bold text-emerald-700 mt-1 block">
+            {verifiedCount} {speedBonusCount > 0 ? <span className="text-xs text-amber-700 font-medium">({speedBonusCount} Speed)</span> : ""}
           </span>
         </div>
-        <div className="p-4 bg-white border border-neutral-200 rounded-sm">
-          <span className="text-xs text-amber-700 uppercase block font-bold">Pending Review</span>
-          <span className="text-2xl font-extrabold text-amber-700 mt-1 block">{pendingCount}</span>
+        <div className="p-4 bg-white border border-neutral-200 rounded-lg shadow-xs">
+          <span className="text-xs text-neutral-600 font-medium block">Pending</span>
+          <span className="text-2xl font-bold text-neutral-800 mt-1 block">{pendingCount}</span>
         </div>
       </div>
 
       {/* Submissions List */}
       <div className="space-y-4">
         {submissions.length === 0 ? (
-          <div className="p-8 bg-white border border-neutral-200 rounded-md text-center text-sm text-neutral-500 font-mono">
-            No bug reports submitted yet. Go test the e-commerce store and report your findings!
+          <div className="p-8 bg-white border border-neutral-200 rounded-lg text-center text-sm text-neutral-500 font-sans shadow-xs">
+            No bug reports submitted yet. Go test the store and report your findings!
           </div>
         ) : (
           submissions.map((sub) => {
@@ -143,49 +143,49 @@ export default function MySubmissionsPage() {
             return (
               <div
                 key={sub.id}
-                className="bg-white border border-neutral-200 rounded-md p-5 space-y-3.5 font-mono text-sm shadow-xs"
+                className="bg-white border border-neutral-200 rounded-lg p-5 space-y-3.5 text-sm shadow-xs font-sans"
               >
                 {/* Header Row */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-neutral-100 pb-2.5">
                   <div className="flex items-center space-x-2">
-                    <span className="font-bold text-neutral-900 text-base">
+                    <span className="font-semibold text-neutral-900 text-base">
                       {isVerified && sub.matchedBug
                         ? `[${sub.matchedBug.id}] ${sub.matchedBug.title}`
-                        : `REPORT #${sub.id.slice(0, 16)}`}
+                        : `Report #${sub.id.slice(0, 16)}`}
                     </span>
                     {isVerified && sub.matchedBug?.category && (
-                      <span className="px-2 py-0.5 bg-neutral-100 text-neutral-800 text-xs font-bold rounded border border-neutral-200">
+                      <span className="px-2 py-0.5 bg-neutral-100 text-neutral-800 text-xs font-medium rounded border border-neutral-200">
                         {sub.matchedBug.category}
                       </span>
                     )}
                   </div>
 
-                  <div className="flex items-center space-x-2 self-start sm:self-auto">
+                  <div className="flex items-center space-x-2 self-start sm:self-auto text-xs">
                     {sub.isSpeedBonus && (
-                      <span className="px-2.5 py-1 bg-amber-100 text-amber-900 text-xs font-bold rounded-sm flex items-center space-x-1 border border-amber-300">
+                      <span className="px-2.5 py-1 bg-amber-50 text-amber-900 font-medium rounded-md flex items-center space-x-1 border border-amber-200">
                         <Zap className="w-3.5 h-3.5 fill-amber-500 text-amber-600" />
-                        <span>FIRST-TO-FIND SPEED BONUS</span>
+                        <span>First-to-Find Speed Bonus</span>
                       </span>
                     )}
 
                     {isVerified && (
-                      <span className="px-2.5 py-1 bg-emerald-100 text-emerald-900 text-xs font-bold rounded-sm flex items-center space-x-1">
+                      <span className="px-2.5 py-1 bg-emerald-50 text-emerald-900 font-medium rounded-md flex items-center space-x-1 border border-emerald-200">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
-                        <span>VERIFIED (+{sub.awardedPoints} PTS)</span>
+                        <span>Verified (+{sub.awardedPoints} pts)</span>
                       </span>
                     )}
 
                     {isRejected && (
-                      <span className="px-2.5 py-1 bg-rose-100 text-rose-900 text-xs font-bold rounded-sm flex items-center space-x-1">
+                      <span className="px-2.5 py-1 bg-rose-50 text-rose-900 font-medium rounded-md flex items-center space-x-1 border border-rose-200">
                         <XCircle className="w-3.5 h-3.5 text-rose-700" />
-                        <span>REJECTED</span>
+                        <span>Rejected</span>
                       </span>
                     )}
 
                     {isPending && (
-                      <span className="px-2.5 py-1 bg-amber-50 text-amber-900 text-xs font-bold rounded-sm flex items-center space-x-1 border border-amber-200">
-                        <Clock className="w-3.5 h-3.5 text-amber-600" />
-                        <span>IN TRIAGE REVIEW</span>
+                      <span className="px-2.5 py-1 bg-neutral-100 text-neutral-700 font-medium rounded-md flex items-center space-x-1 border border-neutral-300">
+                        <Clock className="w-3.5 h-3.5 text-neutral-500" />
+                        <span>Pending</span>
                       </span>
                     )}
                   </div>
@@ -200,7 +200,7 @@ export default function MySubmissionsPage() {
 
                 {/* Code Snippet */}
                 {sub.codeSnippet && (
-                  <div className="p-3 bg-neutral-950 text-neutral-100 rounded text-xs font-mono overflow-x-auto">
+                  <div className="p-3 bg-neutral-950 text-neutral-100 rounded-md text-xs font-mono overflow-x-auto">
                     <pre>{sub.codeSnippet}</pre>
                   </div>
                 )}
@@ -217,9 +217,9 @@ export default function MySubmissionsPage() {
                 )}
 
                 {/* Footer */}
-                <div className="text-xs text-neutral-400 pt-1 flex items-center justify-between border-t border-neutral-100 font-mono">
-                  <span>SUBMITTED: {new Date(sub.createdAt).toLocaleString()}</span>
-                  <span>ID: {sub.id}</span>
+                <div className="text-xs text-neutral-400 pt-1 flex items-center justify-between border-t border-neutral-100 font-sans">
+                  <span>Submitted: {new Date(sub.createdAt).toLocaleString()}</span>
+                  <span className="font-mono text-neutral-500">ID: {sub.id}</span>
                 </div>
               </div>
             );

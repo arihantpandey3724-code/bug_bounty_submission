@@ -21,9 +21,10 @@ export async function POST(
     const body = await req.json();
     const { status, matchedBugId, overridePoints, judgeNotes } = body;
 
-    if (!status || (status !== "VERIFIED" && status !== "REJECTED")) {
+    const validStatuses = ["VERIFIED", "REJECTED", "UNVERIFIED", "PENDING"];
+    if (!status || !validStatuses.includes(status)) {
       return NextResponse.json(
-        { error: "status must be either 'VERIFIED' or 'REJECTED'" },
+        { error: "status must be 'VERIFIED', 'REJECTED', or 'PENDING'" },
         { status: 400 }
       );
     }

@@ -8,9 +8,9 @@ import TeamAuthModal from "@/components/TeamAuthModal";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Entropy 2K26 | QA Submission & Triage Portal",
+  title: "Entropy 2026 | QA Bug Bounty Portal",
   description:
-    "Official bug submission, automated AI grading, and judge triage portal for the Entropy 2K26 E-Commerce Bug Bounty Simulation.",
+    "Official bug bounty reporting and competition platform for Entropy 2026.",
 };
 
 export default function RootLayout({
@@ -27,17 +27,17 @@ export default function RootLayout({
           <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
             {children}
           </main>
-          <footer className="w-full bg-white border-t border-neutral-200 py-4 mt-auto">
-            <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between text-xs text-neutral-500 font-mono">
+          <footer className="w-full bg-white border-t border-neutral-200 py-4 mt-auto font-sans">
+            <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between text-xs text-neutral-500 gap-2">
               <div>
-                [ENTROPY 2K26] QA BUG BOUNTY SIMULATION PORTAL
+                Entropy 2026 Bug Bounty Platform
               </div>
-              <div className="mt-1 sm:mt-0 flex items-center space-x-4">
-                <span>55 MASTER DEFECTS</span>
+              <div className="flex items-center space-x-3 text-neutral-400">
+                <span>55 Target Bugs</span>
                 <span>•</span>
-                <span>10 TREASURE BUGS</span>
+                <span>10 Treasure Flags</span>
                 <span>•</span>
-                <span>MILESTONE: +10 PTS</span>
+                <span>Live Scoring</span>
               </div>
             </div>
           </footer>
