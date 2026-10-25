@@ -206,8 +206,9 @@ ${codeSnippet || "(No code snippet provided)"}
 === INSTRUCTIONS ===
 1. Compare the reported issue against the 55 Master Bugs.
 2. Determine if this submission matches a specific Master Bug (e.g. "EASY-01", "MED-03", "HARD-01").
-3. Determine confidence score between 0.00 and 1.00.
-   CRITICAL REQUIREMENT: Screenshots and code snippets are strictly OPTIONAL for participants. If the participant's text description clearly details what occurred, where the defect happened, and reproduction steps matching one of the 55 Master Bugs, award high confidence (>= 0.85). Do NOT lower confidence or reject a submission merely because a screenshot or code snippet was not provided.
+3. Determine confidence score between 0.00 and 1.00:
+   - REFERENCE SCREENSHOTS ARE OPTIONAL: The judges do NOT provide reference screenshots for every defect. The absence of an official ground-truth reference screenshot is completely normal and expected. When no reference screenshot is attached, evaluate authoritatively using the Master Bug Catalog specifications (Location, Expected behavior, and Actual defect behavior). Never lower confidence because an official reference image is missing.
+   - PARTICIPANT PROOF IS OPTIONAL: Screenshots and code snippets are strictly OPTIONAL for participants. If the participant's text description clearly details what occurred, where the defect happened, and reproduction steps matching one of the 55 Master Bugs, award high confidence (>= 0.85). Do NOT lower confidence or reject a submission merely because a screenshot or code snippet was not provided.
 4. Output strict JSON with these keys:
    {
      "matchedBugId": "EASY-01" | null,
@@ -252,7 +253,7 @@ Respond ONLY with the JSON object. Do not include markdown code fence formatting
         contents.push({
           text: refAttached
             ? "[PARTICIPANT SCREENSHOT]: The image above is the participant's submitted proof. Evaluate visual similarity, UI location, and defect manifestation compared to the ground-truth reference image."
-            : "[PARTICIPANT SCREENSHOT]: The image above is the participant's submitted proof. Analyze visual UI elements, error banners, or discrepancies shown.",
+            : "[PARTICIPANT SCREENSHOT]: The image above is the participant's submitted proof. Note: No judge reference image was provided for this bug (which is expected). Analyze the participant's screenshot directly against the catalog's expected/actual defect behavior and location.",
         });
       }
     }
