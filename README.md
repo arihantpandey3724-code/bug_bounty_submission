@@ -54,10 +54,10 @@ Every single submission is **guaranteed to be preserved** through a dual-layer s
 
 ### B. Reporting a Bug (`/submit`):
 1. Navigate to **Report Bug**.
-2. Enter **Description & Steps to Reproduce** (e.g. what went wrong, which page).
+2. Enter **Description & Steps to Reproduce** (e.g. what went wrong, which page, how to trigger).
 3. *(Optional)* Paste relevant **Code Snippets** or network payloads from DevTools.
-4. *(Optional)* Upload a **Screenshot Proof (SS)** (automatically converted into Base64).
-5. Click **"Submit Bug Report"**. You will receive an instant reference ID and evaluation status.
+4. *(Optional)* Upload a **Screenshot Proof** (automatically converted into Base64).
+> **Note on Proof Requirements**: Screenshots and code snippets are **completely optional**. A clear text description of what went wrong and reproduction steps is all that is required for AI verification and scoring.
 
 ### C. Redeeming Treasure Flags (`/treasures`):
 1. Navigate to **Treasure Vault**.
@@ -67,37 +67,52 @@ Every single submission is **guaranteed to be preserved** through a dual-layer s
 
 ### D. Tracking Results (`/my-submissions`):
 - View your team's complete submission history.
-- See real-time statuses: `VERIFIED (+points)`, `REJECTED`, or `IN TRIAGE REVIEW`.
+- See real-time statuses: `VERIFIED (+points)`, `PENDING`, or `REJECTED`.
 - View whether you captured the **⚡ First-to-Find Speed Bonus**.
 
 ### E. Live Leaderboard (`/leaderboard`):
 - High-density live standings showing team ranks, verified bugs, speed bonuses, claimed treasure flags, milestone bonus (+10 pts), and total points.
 - Features automatic 10-second background sync.
+- Clear disclaimer: *Scores are tentative during competition hours and subject to judge review; no negative marking.*
 
 ---
 
 ## 4. Lead Judge & Admin Console (`/judge`)
 
-Access the judge portal by navigating to **`/judge`**:
-- **Judge Passcode PIN**: `laal_wala_AngryBird`
+### How to Access & Login:
+1. **Navigate to the Judge URL**:
+   - On Vercel: `https://<your-deployment-url>.vercel.app/judge`
+   - On Localhost: `http://localhost:3001/judge`
+   *(The "Judge Console" button is deliberately omitted from the public navbar so participants do not see or click it).*
+2. **Enter the Secret Passcode PIN**:
+   ```text
+   laal_wala_AngryBird
+   ```
+   *(To change this PIN, update the `JUDGE_PIN` variable in `.env` or your Vercel Environment Variables).*
+3. **Click "Access Triage Console"**:
+   - The server verifies the PIN and issues an HTTP-only, secure HMAC-SHA256 session cookie.
+   - The page instantly unlocks and displays the full Judge Console.
+4. **Locking the Console / Logging Out**:
+   - Click the **"Lock Console"** button in the top-right header at any time to invalidate the session cookie and return to the secure passcode screen.
 
-> **Security Note**: The passcode input field is obfuscated with password masking, and the placeholder does not reveal the passcode. To change the PIN at any time, update `JUDGE_PIN` in `.env` (or in your Vercel Environment Variables).
-
-Inside the Judge Console:
+### Inside the Judge Console:
 1. **Triage Desk**:
    - Review incoming bug submissions in real-time.
-   - View team reproduction steps, code snippet, screenshot preview, and **AI Automated Evaluation** (matched bug recommendation + confidence score).
-   - One-click **"Verify & Award"** (automatically calculates base points + first-to-find speed bonus).
-   - One-click **"Reject"** with optional judge feedback note.
-   - Override matched bug ID or points when needed.
+   - **Automated AI Verification**: Submissions with $\ge 80\%$ confidence are automatically verified and awarded points immediately.
+   - **Manual Verification & Review**: Review reproduction steps, optional snippets, and screenshots.
+   - **One-Click Actions**:
+     - `VERIFY & AWARD`: Confirms the finding, calculates base + first-to-find speed bonus, and credits the team score.
+     - `SET PENDING`: Reverts a submission back to pending status and rolls back score if needed.
+     - `REJECT`: Rejects invalid or out-of-scope submissions.
+     - `Points Override` & `Judge Notes`: Customize points awarded or leave private notes.
 2. **Master Bug Matrix & AI Reference Screenshots**:
    - Overview of all 55 Master Defects (18 Easy, 21 Medium, 16 Hard).
-   - See which team captured the first-to-find speed bonus for each bug.
-   - **Attach Ground-Truth Reference Screenshots**: Click `+ Attach` on any defect row to upload a ground-truth reference image. Gemini AI automatically uses these images to evaluate visual similarity against student screenshots!
+   - View which team captured the first-to-find speed bonus for each defect.
+   - **Attach Ground-Truth Reference Screenshots**: Click `+ Attach` on any defect row to upload a reference screenshot. Gemini AI uses these ground-truth images for visual similarity comparison.
 3. **Treasure Flag Codes (10 Slots)**:
-   - Live management panel where judges can edit or customize the secret flag codes for all 10 Treasure Bug slots directly from the interface at any time.
+   - Live management panel where judges can view, edit, or customize the secret flag tokens for all 10 Treasure Bug slots directly from the interface at any time.
 4. **Reset Competition State**:
-   - A dedicated **"RESET COMPETITION"** button that lets you wipe all test submissions, reset team scores, and return all 10 treasure bug slots back to `UNCLAIMED` at any time before or after rehearsals.
+   - A dedicated **"RESET COMPETITION"** button that completely wipes all test submissions, resets team scores, and resets all 10 treasure bug slots back to `UNCLAIMED` to start the competition on a pristine clean slate.
 
 ---
 
