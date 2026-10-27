@@ -184,37 +184,53 @@ export async function POST(req: NextRequest) {
 
       if (dbTeam) {
         if (isAutoVerified && aiResult.matchedBugId) {
-          const bug = await prisma.masterBug.findUnique({
-            where: { id: aiResult.matchedBugId },
-          });
-
-          if (bug) {
-            if (!bug.isFirstFound) {
-              isSpeedBonus = true;
-              await prisma.masterBug.update({
-                where: { id: aiResult.matchedBugId },
-                data: {
-                  isFirstFound: true,
-                  firstFoundById: teamId,
-                },
-              });
-            }
-            awardedPoints = calculateRegularPoints(bug.category, isSpeedBonus);
-          } else {
-            awardedPoints = 3;
-          }
-
-          // Credit team score and valid bug count
-          await prisma.team.update({
-            where: { id: teamId },
-            data: {
-              totalScore: { increment: awardedPoints },
-              validBugsCount: { increment: 1 },
+          // Check if this team has ALREADY been awarded points for this bug
+          const alreadyVerified = await prisma.regularSubmission.findFirst({
+            where: {
+              teamId,
+              matchedBugId: aiResult.matchedBugId,
+              status: "VERIFIED",
+              awardedPoints: { gt: 0 },
             },
           });
 
-          // Check for 10-bug milestone award (+10 pts)
-          await evaluateMilestoneBonus(teamId);
+          if (alreadyVerified) {
+            awardedPoints = 0;
+            isSpeedBonus = false;
+            aiResult.reasoning = `[DUPLICATE] Team has already been credited points for Bug ${aiResult.matchedBugId}. Duplicate submissions for the same defect do not award additional score.`;
+          } else {
+            const bug = await prisma.masterBug.findUnique({
+              where: { id: aiResult.matchedBugId },
+            });
+
+            if (bug) {
+              if (!bug.isFirstFound) {
+                isSpeedBonus = true;
+                await prisma.masterBug.update({
+                  where: { id: aiResult.matchedBugId },
+                  data: {
+                    isFirstFound: true,
+                    firstFoundById: teamId,
+                  },
+                });
+              }
+              awardedPoints = calculateRegularPoints(bug.category, isSpeedBonus);
+            } else {
+              awardedPoints = 3;
+            }
+
+            // Credit team score and valid bug count
+            await prisma.team.update({
+              where: { id: teamId },
+              data: {
+                totalScore: { increment: awardedPoints },
+                validBugsCount: { increment: 1 },
+              },
+            });
+
+            // Check for 10-bug milestone award (+10 pts)
+            await evaluateMilestoneBonus(teamId);
+          }
         }
 
         await prisma.regularSubmission.create({

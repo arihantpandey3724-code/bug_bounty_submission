@@ -157,7 +157,27 @@ export async function executeJudgeVerdict({
   let isSpeed = false;
   let pointsToAward = 0;
 
-  if (overridePoints !== undefined && overridePoints !== null && overridePoints >= 0) {
+  // Check if team already has another verified submission for this bug with awardedPoints > 0
+  let isDuplicateAward = false;
+  if (effectiveBugId) {
+    const existingAward = await prisma.regularSubmission.findFirst({
+      where: {
+        teamId: submission.teamId,
+        matchedBugId: effectiveBugId,
+        status: "VERIFIED",
+        id: { not: submissionId },
+        awardedPoints: { gt: 0 },
+      },
+    });
+    if (existingAward) {
+      isDuplicateAward = true;
+    }
+  }
+
+  if (isDuplicateAward) {
+    pointsToAward = 0;
+    isSpeed = false;
+  } else if (overridePoints !== undefined && overridePoints !== null && overridePoints >= 0) {
     pointsToAward = overridePoints;
   } else if (effectiveBugId) {
     const bug = await prisma.masterBug.findUnique({

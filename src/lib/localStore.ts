@@ -220,7 +220,7 @@ class LocalStore {
     const team = this.findTeamById(data.teamId);
     const id = `sub-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const status = data.status || "UNVERIFIED";
-    const awardedPoints = data.awardedPoints || 0;
+    let awardedPoints = data.awardedPoints || 0;
     const isSpeedBonus = Boolean(data.isSpeedBonus);
 
     const submission = {
@@ -241,20 +241,33 @@ class LocalStore {
     };
 
     if (status === "VERIFIED") {
-      if (data.matchedBugId && this.bugs.has(data.matchedBugId)) {
-        const b = this.bugs.get(data.matchedBugId)!;
-        b.totalReports += 1;
-        b.verifiedReports += 1;
-        if (isSpeedBonus) {
-          b.isFirstFound = true;
-          b.firstFoundById = data.teamId;
-          b.firstFoundByTeam = team?.name || "Team";
+      // Check if team already has a verified submission for this bug with awardedPoints > 0
+      const existingSubmissions = readDiskBackups();
+      const alreadyAwarded = data.matchedBugId && existingSubmissions.some(
+        (s) => s.teamId === data.teamId && s.matchedBugId === data.matchedBugId && s.status === "VERIFIED" && s.awardedPoints > 0
+      );
+
+      if (alreadyAwarded) {
+        awardedPoints = 0;
+        submission.awardedPoints = 0;
+        submission.isSpeedBonus = false;
+        submission.llmReasoning = `[DUPLICATE] Team has already received points for Bug ${data.matchedBugId}. Duplicate submissions do not award additional score.`;
+      } else {
+        if (data.matchedBugId && this.bugs.has(data.matchedBugId)) {
+          const b = this.bugs.get(data.matchedBugId)!;
+          b.totalReports += 1;
+          b.verifiedReports += 1;
+          if (isSpeedBonus) {
+            b.isFirstFound = true;
+            b.firstFoundById = data.teamId;
+            b.firstFoundByTeam = team?.name || "Team";
+          }
         }
-      }
-      if (team) {
-        team.totalScore += awardedPoints;
-        team.validBugsCount += 1;
-        this.checkMilestone(team);
+        if (team) {
+          team.totalScore += awardedPoints;
+          team.validBugsCount += 1;
+          this.checkMilestone(team);
+        }
       }
     } else if (data.matchedBugId && this.bugs.has(data.matchedBugId)) {
       const b = this.bugs.get(data.matchedBugId)!;
@@ -325,7 +338,15 @@ class LocalStore {
       let isSpeed = false;
       let pts = 3;
 
-      if (overridePoints !== undefined && overridePoints !== null) {
+      // Check if team already has another verified submission for this bug
+      const alreadyAwarded = effBugId && submissions.some(
+        (s) => s.teamId === sub.teamId && s.matchedBugId === effBugId && s.status === "VERIFIED" && s.id !== sub.id && s.awardedPoints > 0
+      );
+
+      if (alreadyAwarded) {
+        pts = 0;
+        isSpeed = false;
+      } else if (overridePoints !== undefined && overridePoints !== null) {
         pts = overridePoints;
       } else if (effBugId && this.bugs.has(effBugId)) {
         const b = this.bugs.get(effBugId)!;
