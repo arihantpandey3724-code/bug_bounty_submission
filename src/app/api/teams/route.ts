@@ -23,8 +23,8 @@ export async function GET(req: NextRequest) {
       }
 
       if (email) {
-        const team = await prisma.team.findUnique({
-          where: { email },
+        const team = await prisma.team.findFirst({
+          where: { email: { equals: email.trim(), mode: "insensitive" } },
           include: {
             submissions: { orderBy: { createdAt: "desc" } },
             claimedTreasures: true,
@@ -75,30 +75,64 @@ export async function POST(req: NextRequest) {
     const cleanEmail = email.trim().toLowerCase();
 
     try {
+      // Find existing team across all 3 laptops case-insensitively by name or email
       let team = await prisma.team.findFirst({
         where: {
-          OR: [{ email: cleanEmail }, { name: cleanName }],
+          OR: [
+            { email: { equals: cleanEmail, mode: "insensitive" } },
+            { name: { equals: cleanName, mode: "insensitive" } },
+          ],
+        },
+        include: {
+          submissions: { orderBy: { createdAt: "desc" } },
+          claimedTreasures: true,
         },
       });
 
       if (!team) {
-        team = await prisma.team.create({
-          data: {
-            name: cleanName,
-            email: cleanEmail,
-            totalScore: 0,
-            validBugsCount: 0,
-            hasMilestoneBonus: false,
-          },
-        });
+        try {
+          team = await prisma.team.create({
+            data: {
+              name: cleanName,
+              email: cleanEmail,
+              totalScore: 0,
+              validBugsCount: 0,
+              hasMilestoneBonus: false,
+            },
+            include: {
+              submissions: { orderBy: { createdAt: "desc" } },
+              claimedTreasures: true,
+            },
+          });
+        } catch {
+          // If a concurrent creation occurred simultaneously from another teammate's laptop
+          team = await prisma.team.findFirst({
+            where: {
+              OR: [
+                { email: { equals: cleanEmail, mode: "insensitive" } },
+                { name: { equals: cleanName, mode: "insensitive" } },
+              ],
+            },
+            include: {
+              submissions: { orderBy: { createdAt: "desc" } },
+              claimedTreasures: true,
+            },
+          });
+        }
       }
 
       localStore.createTeam(cleanName, cleanEmail);
-      return NextResponse.json({ team, message: "Team authenticated successfully" });
+      return NextResponse.json({
+        team,
+        message: "Team recognized and authenticated successfully across all team devices",
+      });
     } catch (dbErr: any) {
       console.warn("[api/teams POST fallback to localStore]:", dbErr.message);
       const team = localStore.createTeam(cleanName, cleanEmail);
-      return NextResponse.json({ team, message: "Team authenticated successfully in local store" });
+      return NextResponse.json({
+        team,
+        message: "Team authenticated successfully in local store",
+      });
     }
   } catch (err: any) {
     return NextResponse.json(

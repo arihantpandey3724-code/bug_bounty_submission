@@ -44,9 +44,13 @@ export default function TeamAuthModal() {
           </button>
         </div>
 
-        <p className="text-sm text-neutral-600 mb-5 leading-relaxed font-sans">
+        <p className="text-sm text-neutral-600 mb-2 leading-relaxed font-sans">
           Enter your team name and contact email to report bugs and claim treasure flags.
         </p>
+
+        <div className="text-xs text-neutral-500 mb-5 bg-neutral-50 border border-neutral-200 p-2.5 rounded-md leading-relaxed font-sans">
+          <span className="font-semibold text-neutral-800">Multi-Device Team Support:</span> All 3 teammates can sign in on 3 separate laptops using the exact same Team Name or Email. All submitted reports, flags, and scores synchronize across your devices automatically.
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 font-sans">
           <div>

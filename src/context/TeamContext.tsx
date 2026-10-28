@@ -43,6 +43,27 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(false);
   }, []);
 
+  // Multi-laptop auto-synchronization:
+  // When multiple teammates login on 3 separate laptops, periodically poll stats
+  // and immediately refresh on window focus so all 3 laptops see live scores in real-time.
+  useEffect(() => {
+    if (!team?.id) return;
+
+    const interval = setInterval(() => {
+      fetchTeamStats(team.id);
+    }, 15000);
+
+    const onFocus = () => {
+      fetchTeamStats(team.id);
+    };
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [team?.id]);
+
   async function fetchTeamStats(teamId: string) {
     try {
       const res = await fetch(`/api/teams?id=${teamId}`);
