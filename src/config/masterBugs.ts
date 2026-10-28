@@ -569,7 +569,7 @@ export const MASTER_BUGS: MasterBugDef[] = [
 
 export const INITIAL_TREASURES = [
   { id: 1, code: "FLAG{7_clicks_unlocked_secret_treasure}" },
-  { id: 2, code: "FLAG{admin_debug_mode_escalation_success}" },
+  { id: 2, code: "FLAG{TREASURE_BUG_02_RESERVED}" },
   { id: 3, code: "FLAG{inspect_element_dom_source_revealed}" },
   { id: 4, code: "FLAG{TREASURE_BUG_04_RESERVED}" },
   { id: 5, code: "FLAG{TREASURE_BUG_05_RESERVED}" },
