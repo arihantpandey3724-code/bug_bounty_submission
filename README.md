@@ -47,10 +47,11 @@ Every single submission is **guaranteed to be preserved** through a dual-layer s
 
 ## 3. How Participants Use the Website
 
-### A. Team Sign-In:
+### A. Team Sign-In & Multi-Laptop Sync:
 - Click **"Sign In Team"** in the top navigation bar.
 - Enter your **Team Name** (e.g. `Team Apex`) and **Contact Email**.
-- The portal remembers your team session and displays your current score and verified bug count in the header.
+- **Multi-Device Support (3 Laptops per Team)**: All 3 teammates sign into the Submission Portal using the exact same Team Name or Email. Submissions, flags, and points sync automatically across all 3 devices in real time.
+- **Amazon Replica Storefront Account**: For testing on the target Amazon store, each team must register their own dedicated account at `/register` using their team credentials. Orders and addresses are kept private per team, inventory is non-depleting across all teams, and only product reviews are shared across the community.
 
 ### B. Reporting a Bug (`/submit`):
 1. Navigate to **Report Bug**.
