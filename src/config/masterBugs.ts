@@ -404,7 +404,7 @@ export const MASTER_BUGS: MasterBugDef[] = [
     actual: "Scrolling past catalog bottom endlessly duplicates and re-renders the first few products in grid.",
   },
 
-  // --- Hard Defects (1 - 16) --- Base: 10 pts, Speed Bonus: 10 pts ---
+  // --- Hard Defects (1 - 15 Active, HARD-03 Retired with Admin Removal) --- Base: 10 pts, Speed Bonus: 10 pts ---
   {
     id: "HARD-01",
     title: "Order Payload Pricing Authority",
@@ -424,16 +424,6 @@ export const MASTER_BUGS: MasterBugDef[] = [
     location: "Order Summary Route (src/app/orders/[id]/summary / src/app/api/orders/[id]/route.ts)",
     expected: "User can only view orders belonging to their account.",
     actual: "Changing order ID parameter in URL allows viewing other customers' order details.",
-  },
-  {
-    id: "HARD-03",
-    title: "Administrative Route Access Control",
-    category: "HARD",
-    basePoints: 10,
-    speedBonusPoints: 10,
-    location: "Admin Console (src/app/admin/users/page.tsx)",
-    expected: "Non-admin users should be redirected or returned HTTP 403 Forbidden.",
-    actual: "Direct navigation to /admin/users renders back-office user management console for regular customers.",
   },
   {
     id: "HARD-04",
@@ -567,6 +557,8 @@ export const MASTER_BUGS: MasterBugDef[] = [
   },
 ];
 
+// Note: Treasure bug flags are currently withheld/dormant in the storefront.
+// Staged for release when the competition administrator provides trigger instructions.
 export const INITIAL_TREASURES = [
   { id: 1, code: "FLAG{7_clicks_unlocked_secret_treasure}" },
   { id: 2, code: "FLAG{TREASURE_BUG_02_RESERVED}" },

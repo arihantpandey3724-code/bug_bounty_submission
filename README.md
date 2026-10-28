@@ -107,24 +107,26 @@ Every single submission is **guaranteed to be preserved** through a dual-layer s
      - `REJECT`: Rejects invalid or out-of-scope submissions.
      - `Points Override` & `Judge Notes`: Customize points awarded or leave private notes.
 2. **Master Bug Matrix & AI Reference Screenshots**:
-   - Overview of all 55 Master Defects (18 Easy, 21 Medium, 16 Hard).
+   - Overview of all 54 Active Master Defects (18 Easy, 21 Medium, 15 Hard).
    - View which team captured the first-to-find speed bonus for each defect.
    - **Attach Ground-Truth Reference Screenshots**: Click `+ Attach` on any defect row to upload a reference screenshot. Gemini AI uses these ground-truth images for visual similarity comparison.
-3. **Treasure Flag Codes (10 Slots)**:
-   - Live management panel where judges can view, edit, or customize the secret flag tokens for all 10 Treasure Bug slots directly from the interface at any time.
-4. **Reset Competition State**:
-   - A dedicated **"RESET COMPETITION"** button that completely wipes all test submissions, resets team scores, and resets all 10 treasure bug slots back to `UNCLAIMED` to start the competition on a pristine clean slate.
+3. **Treasure Flag Codes (10 Reserved Slots)**:
+   - Live management panel where judges can view, edit, or customize the secret flag tokens for all 10 Treasure Bug slots directly from the interface at any time. (Treasure flags are currently withheld/dormant in the storefront for staged release).
+4. **Reset Controls (Competition & Storefront)**:
+   - **"RESET STOREFRONT" Button**: Added in the Judge Console header. Sends a POST signal to the Amazon Storefront (`/api/admin/reset`) to immediately restore all ~60 products back to baseline stock counts, purge in-memory test orders, and clear test order records without restarting servers.
+   - **"RESET COMPETITION" Button**: Completely wipes all test submissions, resets team scores, and resets all 10 treasure bug slots back to `UNCLAIMED` to start the competition on a pristine clean slate.
 
 ---
 
 ## 5. Official Competition Scoring Matrix
 
-| Category | Seeded Count | Base Points | First-to-Find Speed Bonus | Max Points / Bug |
+| Category | Active Count | Base Points | First-to-Find Speed Bonus | Max Points / Bug |
 | :--- | :---: | :---: | :---: | :---: |
-| **Easy Defects** | 18 | 3 pts | +2 pts | **5 pts** |
-| **Medium Defects** | 21 | 5 pts | +5 pts | **10 pts** |
-| **Hard Defects** | 16 | 10 pts | +10 pts | **20 pts** |
-| **Treasure Bugs** | 10 | 10 pts | — | **10 pts** |
+| **Easy Defects** | **18** | 3 pts | +2 pts | **5 pts** |
+| **Medium Defects** | **21** | 5 pts | +5 pts | **10 pts** |
+| **Hard Defects** | **15** *(HARD-03 Retired)* | 10 pts | +10 pts | **20 pts** |
+| **TOTAL ACTIVE** | **54** | — | — | — |
+| **Treasure Bugs** | 10 *(Withheld)* | 10 pts | — | **10 pts** |
 | **Milestone Bonus** | 1 | +10 pts | — | **+10 pts** |
 
 > **Milestone Bonus (Rule 3.4)**: The very first team to successfully report 10 valid bugs (combining regular and/or treasure bugs) is automatically awarded a one-time **+10 Point Milestone Bonus**.

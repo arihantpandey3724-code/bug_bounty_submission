@@ -212,6 +212,53 @@ export default function JudgeConsole() {
     }
   }
 
+  async function handleResetStorefront() {
+    if (
+      !confirm(
+        "Are you sure you want to reset the Amazon Replica Storefront?\n\nThis will purge all team orders, reset inventory stock levels, and wipe temporary test cart data."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const storedUrl = typeof window !== "undefined" ? localStorage.getItem("amazon_storefront_url") || "" : "";
+      const res = await fetch("/api/judge/reset-storefront", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storefrontUrl: storedUrl }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert("✅ Amazon Storefront successfully reset! Orders and inventory restored.");
+      } else {
+        const customUrl = prompt(
+          `Could not connect to storefront at configured URL (${data.targetTried || "default"}).\n\nEnter your deployed Amazon Storefront URL (e.g. https://your-amazon-replica.vercel.app):`,
+          storedUrl || "https://"
+        );
+        if (customUrl && customUrl.trim()) {
+          const cleanUrl = customUrl.trim().replace(/\/$/, "");
+          if (typeof window !== "undefined") {
+            localStorage.setItem("amazon_storefront_url", cleanUrl);
+          }
+          const retryRes = await fetch("/api/judge/reset-storefront", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ storefrontUrl: cleanUrl }),
+          });
+          const retryData = await retryRes.json();
+          if (retryRes.ok && retryData.success) {
+            alert(`✅ Successfully reset Amazon Storefront at ${cleanUrl}!`);
+          } else {
+            alert("Error resetting storefront: " + (retryData.error || retryData.details || "Connection failed"));
+          }
+        }
+      }
+    } catch (err: any) {
+      alert("Network error: " + err.message);
+    }
+  }
+
   async function submitJudgeVerdict(
     submissionId: string,
     verdict: "VERIFIED" | "REJECTED" | "UNVERIFIED"
@@ -300,6 +347,14 @@ export default function JudgeConsole() {
         </div>
 
         <div className="flex items-center space-x-2.5">
+          <button
+            onClick={handleResetStorefront}
+            className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-mono font-bold rounded-sm flex items-center space-x-1.5 transition-colors"
+            title="Reset Amazon Replica storefront orders, inventory decrements, and accounts"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
+            <span>RESET STOREFRONT</span>
+          </button>
           <button
             onClick={handleResetCompetition}
             className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 text-xs font-mono font-bold rounded-sm flex items-center space-x-1.5 transition-colors"
