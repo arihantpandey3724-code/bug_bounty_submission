@@ -258,10 +258,26 @@ Respond ONLY with the JSON object. Do not include markdown code fence formatting
       }
     }
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents,
+    const GEMINI_TIMEOUT_MS = 3000;
+    let timer: NodeJS.Timeout | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error("Gemini AI evaluation timed out after 3000ms"));
+      }, GEMINI_TIMEOUT_MS);
     });
+
+    let response: any;
+    try {
+      response = await Promise.race([
+        ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents,
+        }),
+        timeoutPromise,
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
 
     const rawText = response.text?.trim() || "";
     // Clean any accidental markdown fence
