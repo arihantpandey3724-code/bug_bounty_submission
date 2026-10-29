@@ -486,8 +486,8 @@ export default function JudgeConsole() {
                     </div>
 
                     <div className="flex items-center space-x-2">
-                      <span className="text-xs text-neutral-400">
-                        {new Date(sub.createdAt).toLocaleTimeString()}
+                      <span className="text-xs text-neutral-500 font-medium">
+                        {new Date(sub.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} • {new Date(sub.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                       </span>
                       <span
                         className={`px-2.5 py-0.5 rounded-sm font-bold text-xs ${

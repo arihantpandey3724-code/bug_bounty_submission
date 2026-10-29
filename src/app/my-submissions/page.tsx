@@ -216,10 +216,16 @@ export default function MySubmissionsPage() {
                   </div>
                 )}
 
-                {/* Footer */}
-                <div className="text-xs text-neutral-400 pt-1 flex items-center justify-between border-t border-neutral-100 font-sans">
-                  <span>Submitted: {new Date(sub.createdAt).toLocaleString()}</span>
-                  <span className="font-mono text-neutral-500">ID: {sub.id}</span>
+                {/* Footer with Clear Timestamp */}
+                <div className="text-xs text-neutral-600 pt-2 flex flex-wrap items-center justify-between border-t border-neutral-100 font-sans gap-2">
+                  <div className="flex items-center space-x-1.5 text-neutral-700">
+                    <Clock className="w-3.5 h-3.5 text-neutral-500" />
+                    <span>Submitted at:</span>
+                    <strong className="text-neutral-900 font-medium">
+                      {new Date(sub.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} • {new Date(sub.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </strong>
+                  </div>
+                  <span className="font-mono text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded text-[11px]">ID: {sub.id}</span>
                 </div>
               </div>
             );

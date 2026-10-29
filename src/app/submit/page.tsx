@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useTeam } from "@/context/TeamContext";
-import { Bug, Upload, AlertCircle, FileCode2, Image as ImageIcon, X } from "lucide-react";
+import { Bug, Upload, AlertCircle, FileCode2, Image as ImageIcon, X, Clock } from "lucide-react";
 import Link from "next/link";
 
 export default function SubmitBugPage() {
@@ -175,11 +175,20 @@ export default function SubmitBugPage() {
               View your submissions →
             </Link>
           </div>
-          <div className="pt-2.5 border-t border-neutral-200/80 flex items-center text-xs text-neutral-500">
-            <span>Reference ID:</span>
-            <code className="ml-1.5 px-2 py-0.5 bg-neutral-200/60 text-neutral-700 rounded font-mono text-[11px]">
-              {submittedResult.id}
-            </code>
+          <div className="pt-2.5 border-t border-neutral-200/80 flex flex-wrap items-center justify-between text-xs text-neutral-600 gap-2">
+            <div className="flex items-center space-x-1.5">
+              <Clock className="w-3.5 h-3.5 text-neutral-500" />
+              <span>Submitted at:</span>
+              <strong className="text-neutral-900 font-medium">
+                {new Date(submittedResult.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} ({new Date(submittedResult.createdAt || Date.now()).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })})
+              </strong>
+            </div>
+            <div className="flex items-center">
+              <span>Reference ID:</span>
+              <code className="ml-1.5 px-2 py-0.5 bg-neutral-200/60 text-neutral-700 rounded font-mono text-[11px]">
+                {submittedResult.id}
+              </code>
+            </div>
           </div>
         </div>
       )}
