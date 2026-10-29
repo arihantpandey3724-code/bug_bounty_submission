@@ -40,8 +40,11 @@ export default function JudgeConsole() {
   const [treasuresData, setTreasuresData] = useState<any[]>([]);
   const [editingCode, setEditingCode] = useState<{ [id: number]: string }>({});
   const [savingTreasureId, setSavingTreasureId] = useState<number | null>(null);
+  const [isPortalOpen, setIsPortalOpen] = useState(true);
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false);
 
   useEffect(() => {
+    loadPortalStatus();
     loadTriageSubmissions();
     loadMasterBugs();
     loadTreasures();
@@ -55,6 +58,49 @@ export default function JudgeConsole() {
       console.warn("Logout error:", err);
     }
     window.location.reload();
+  }
+
+  async function loadPortalStatus() {
+    try {
+      const res = await fetch("/api/admin/portal-status");
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data.submissionsOpen === "boolean") {
+          setIsPortalOpen(data.submissionsOpen);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load portal status:", e);
+    }
+  }
+
+  async function handleTogglePortalStatus() {
+    const action = isPortalOpen ? "PAUSE" : "START / OPEN";
+    const msg = isPortalOpen
+      ? "Are you sure you want to PAUSE the submission portal?\n\nParticipants will NOT be able to submit any bug reports while paused."
+      : "Are you sure you want to START / OPEN the submission portal?\n\nParticipants will be able to submit bug reports immediately.";
+
+    if (!confirm(msg)) return;
+
+    setIsTogglingStatus(true);
+    try {
+      const res = await fetch("/api/admin/portal-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submissionsOpen: !isPortalOpen }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setIsPortalOpen(data.submissionsOpen);
+        alert(data.message);
+      } else {
+        alert("Failed to update portal status: " + (data.error || "Unknown error"));
+      }
+    } catch (err: any) {
+      alert("Error updating portal status: " + err.message);
+    } finally {
+      setIsTogglingStatus(false);
+    }
   }
 
   async function loadTriageSubmissions() {
@@ -347,6 +393,21 @@ export default function JudgeConsole() {
         </div>
 
         <div className="flex items-center space-x-2.5">
+          {/* Portal Start / Stop Toggle */}
+          <button
+            onClick={handleTogglePortalStatus}
+            disabled={isTogglingStatus}
+            className={`px-3.5 py-2 text-xs font-mono font-bold rounded-sm flex items-center space-x-1.5 transition-colors border shadow-xs ${
+              isPortalOpen
+                ? "bg-emerald-50 hover:bg-rose-50 text-emerald-800 hover:text-rose-800 border-emerald-300 hover:border-rose-300"
+                : "bg-rose-50 hover:bg-emerald-50 text-rose-800 hover:text-emerald-800 border-rose-300 hover:border-emerald-300"
+            }`}
+            title={isPortalOpen ? "Click to Pause / Stop Submissions" : "Click to Start / Open Submissions"}
+          >
+            <span className={`w-2 h-2 rounded-full ${isPortalOpen ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+            <span>{isPortalOpen ? "PORTAL: OPEN (CLICK TO PAUSE)" : "PORTAL: PAUSED (CLICK TO START)"}</span>
+          </button>
+
           <button
             onClick={handleResetStorefront}
             className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-mono font-bold rounded-sm flex items-center space-x-1.5 transition-colors"

@@ -45,6 +45,8 @@ class LocalStore {
   bugs: Map<string, LocalMasterBug> = new Map();
   milestoneAwardedTo: string | null = null;
   milestoneAwardedAt: string | null = null;
+  submissionsOpen: boolean = true;
+  submissionsStatusUpdatedAt: string = new Date().toISOString();
 
   constructor() {
     this.init();
@@ -135,6 +137,21 @@ class LocalStore {
     } catch (e) {
       console.warn("[localStore] Could not hydrate from disk backup:", e);
     }
+
+    // 5. Load portal config (Start/Stop state) from disk
+    try {
+      const configPath = path.join(process.cwd(), "data", "portal_config.json");
+      if (fs.existsSync(configPath)) {
+        const raw = fs.readFileSync(configPath, "utf8");
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.submissionsOpen === "boolean") {
+          this.submissionsOpen = parsed.submissionsOpen;
+          this.submissionsStatusUpdatedAt = parsed.updatedAt || new Date().toISOString();
+        }
+      }
+    } catch (e) {
+      // fallback to true
+    }
   }
 
   /**
@@ -163,8 +180,35 @@ class LocalStore {
     });
     this.milestoneAwardedTo = null;
     this.milestoneAwardedAt = null;
+    this.submissionsOpen = true;
+    this.submissionsStatusUpdatedAt = new Date().toISOString();
     clearDiskBackup();
     console.log("[localStore] Competition state completely reset to clean slate.");
+  }
+
+  isSubmissionsOpen(): boolean {
+    return this.submissionsOpen;
+  }
+
+  setSubmissionsOpen(isOpen: boolean): boolean {
+    this.submissionsOpen = isOpen;
+    this.submissionsStatusUpdatedAt = new Date().toISOString();
+    try {
+      const configDir = path.join(process.cwd(), "data");
+      if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
+      const configPath = path.join(configDir, "portal_config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          submissionsOpen: isOpen,
+          updatedAt: this.submissionsStatusUpdatedAt,
+        }),
+        "utf8"
+      );
+    } catch (e) {
+      console.warn("[localStore] Failed to write portal_config.json:", e);
+    }
+    return this.submissionsOpen;
   }
 
   getTeams(): LocalTeam[] {

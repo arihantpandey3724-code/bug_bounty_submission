@@ -14,6 +14,26 @@ export default function SubmitBugPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedResult, setSubmittedResult] = useState<any | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isSubmissionsOpen, setIsSubmissionsOpen] = useState(true);
+
+  React.useEffect(() => {
+    async function checkStatus() {
+      try {
+        const res = await fetch("/api/admin/portal-status");
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof data.submissionsOpen === "boolean") {
+            setIsSubmissionsOpen(data.submissionsOpen);
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    checkStatus();
+    const interval = setInterval(checkStatus, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Convert uploaded image file to Base64 data URL
   function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -72,6 +92,11 @@ export default function SubmitBugPage() {
       return;
     }
 
+    if (!isSubmissionsOpen) {
+      setErrorMsg("Submissions are currently paused by the event organizers. Please wait until submissions are resumed.");
+      return;
+    }
+
     if (!description.trim()) {
       setErrorMsg("Please provide a bug description and steps to reproduce.");
       return;
@@ -123,6 +148,19 @@ export default function SubmitBugPage() {
           Provide reproduction steps explaining what went wrong. Code snippets and screenshots are completely optional.
         </p>
       </div>
+
+      {/* Portal Paused Banner */}
+      {!isSubmissionsOpen && (
+        <div className="p-4 bg-amber-50 border border-amber-300 rounded-md flex items-center space-x-3 text-amber-950 font-sans shadow-xs">
+          <AlertCircle className="w-5 h-5 text-amber-700 flex-shrink-0" />
+          <div>
+            <span className="font-bold text-sm block">Submissions are currently paused</span>
+            <span className="text-xs text-amber-800">
+              The event organizers have temporarily closed the submission portal. You will be able to submit your findings as soon as submissions are resumed.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Team Auth Banner */}
       {!team ? (
@@ -289,10 +327,18 @@ export default function SubmitBugPage() {
           </span>
           <button
             type="submit"
-            disabled={isSubmitting || !team}
-            className="px-6 py-2.5 bg-neutral-900 text-white text-sm font-sans font-medium hover:bg-neutral-800 disabled:opacity-50 rounded-md transition-colors shadow-sm"
+            disabled={isSubmitting || !team || !isSubmissionsOpen}
+            className={`px-6 py-2.5 text-sm font-sans font-medium rounded-md transition-colors shadow-sm ${
+              !isSubmissionsOpen
+                ? "bg-neutral-300 text-neutral-600 cursor-not-allowed border border-neutral-300"
+                : "bg-neutral-900 text-white hover:bg-neutral-800 disabled:opacity-50"
+            }`}
           >
-            {isSubmitting ? "Submitting..." : "Submit Bug Report"}
+            {!isSubmissionsOpen
+              ? "Submissions Paused"
+              : isSubmitting
+              ? "Submitting..."
+              : "Submit Bug Report"}
           </button>
         </div>
       </form>

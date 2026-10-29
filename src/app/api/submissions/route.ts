@@ -118,6 +118,14 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    // 0. SUBMISSION PORTAL ACTIVE GATE
+    if (!localStore.isSubmissionsOpen()) {
+      return NextResponse.json(
+        { error: "Submissions are currently paused by the event organizers. Please wait until submissions are resumed." },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const { teamId, description, codeSnippet, screenshotUrl } = body;
 
