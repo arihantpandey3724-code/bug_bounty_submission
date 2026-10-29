@@ -189,7 +189,7 @@ export const MASTER_BUGS: MasterBugDef[] = [
     speedBonusPoints: 2,
     location: "Currency Selector (src/components/Header.tsx / src/lib/utils.ts)",
     expected: "Switching currency to CAD should increase numeric value proportionally based on exchange rate.",
-    actual: "Switching currency to CAD drops displayed prices by 25% due to an inverted exchange rate multiplier.",
+    actual: "Storefront defaults to INR (₹), but switching currency to CAD drops prices to 75% of base USD value due to an inverted 0.75x multiplier.",
   },
 
   // --- Medium Defects (1 - 21) --- Base: 5 pts, Speed Bonus: 5 pts ---
@@ -301,7 +301,7 @@ export const MASTER_BUGS: MasterBugDef[] = [
     speedBonusPoints: 5,
     location: "Checkout Review Step (src/app/checkout/page.tsx)",
     expected: "Currency symbol should remain consistent across catalog and checkout.",
-    actual: "Catalog displays USD ($), but checkout review swaps symbol to EUR (€) without numeric conversion.",
+    actual: "Catalog defaults to INR (₹) or USD ($), but checkout review swaps symbol to EUR (€) without numeric conversion.",
   },
   {
     id: "MED-12",

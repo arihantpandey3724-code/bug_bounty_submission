@@ -6,6 +6,7 @@ import localStore from "@/lib/localStore";
 import { isJudgeAuthorized } from "@/lib/judgeAuth";
 import { calculateRegularPoints, evaluateMilestoneBonus } from "@/lib/scoring";
 import { MASTER_BUGS } from "@/config/masterBugs";
+import { isDbActiveSync, markDbOffline } from "@/lib/dbCircuitBreaker";
 
 export const dynamic = "force-dynamic";
 
@@ -26,83 +27,89 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    try {
-      const where: any = {};
-      if (teamId) where.teamId = teamId;
-      if (status && status !== "ALL") where.status = status;
-      if (bugId) where.matchedBugId = bugId;
+    // === DB PATH (fast-skip if circuit breaker is open) ===
+    if (isDbActiveSync()) {
+      try {
+        const where: any = {};
+        if (teamId) where.teamId = teamId;
+        if (status && status !== "ALL") where.status = status;
+        if (bugId) where.matchedBugId = bugId;
 
-      const rawSubmissions = await prisma.regularSubmission.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-        include: {
-          team: {
-            select: { id: true, name: true, email: true },
+        const rawSubmissions = await prisma.regularSubmission.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+          include: {
+            team: {
+              select: { id: true, name: true, email: true },
+            },
+            matchedBug: true,
           },
-          matchedBug: true,
-        },
-      });
+        });
 
-      if (isJudge) {
-        return NextResponse.json({ submissions: rawSubmissions });
+        if (isJudge) {
+          return NextResponse.json({ submissions: rawSubmissions });
+        }
+
+        const sanitized = rawSubmissions.map((sub) => ({
+          id: sub.id,
+          teamId: sub.teamId,
+          team: sub.team,
+          description: sub.description,
+          codeSnippet: sub.codeSnippet,
+          screenshotUrl: sub.screenshotUrl,
+          status: sub.status,
+          awardedPoints: sub.awardedPoints,
+          isSpeedBonus: sub.isSpeedBonus,
+          createdAt: sub.createdAt,
+          matchedBug:
+            sub.status === "VERIFIED" && sub.matchedBug
+              ? {
+                  id: sub.matchedBug.id,
+                  title: sub.matchedBug.title,
+                  category: sub.matchedBug.category,
+                }
+              : null,
+        }));
+
+        return NextResponse.json({ submissions: sanitized });
+      } catch (dbErr: any) {
+        markDbOffline();
+        console.warn("[api/submissions GET] DB offline, switching to localStore:", dbErr.message);
       }
-
-      // Sanitize for participants: never expose internal AI evaluations or unverified bug IDs
-      const sanitized = rawSubmissions.map((sub) => ({
-        id: sub.id,
-        teamId: sub.teamId,
-        team: sub.team,
-        description: sub.description,
-        codeSnippet: sub.codeSnippet,
-        screenshotUrl: sub.screenshotUrl,
-        status: sub.status,
-        awardedPoints: sub.awardedPoints,
-        isSpeedBonus: sub.isSpeedBonus,
-        createdAt: sub.createdAt,
-        matchedBug:
-          sub.status === "VERIFIED" && sub.matchedBug
-            ? {
-                id: sub.matchedBug.id,
-                title: sub.matchedBug.title,
-                category: sub.matchedBug.category,
-              }
-            : null,
-      }));
-
-      return NextResponse.json({ submissions: sanitized });
-    } catch (dbErr: any) {
-      const rawSubmissions = localStore.getSubmissions({
-        teamId: teamId || undefined,
-        status: status || undefined,
-      });
-
-      if (isJudge) {
-        return NextResponse.json({ submissions: rawSubmissions });
-      }
-
-      const sanitized = rawSubmissions.map((sub: any) => ({
-        id: sub.id,
-        teamId: sub.teamId,
-        team: sub.team,
-        description: sub.description,
-        codeSnippet: sub.codeSnippet,
-        screenshotUrl: sub.screenshotUrl,
-        status: sub.status,
-        awardedPoints: sub.awardedPoints,
-        isSpeedBonus: sub.isSpeedBonus,
-        createdAt: sub.createdAt,
-        matchedBug:
-          sub.status === "VERIFIED" && sub.matchedBug
-            ? {
-                id: sub.matchedBug.id,
-                title: sub.matchedBug.title,
-                category: sub.matchedBug.category,
-              }
-            : null,
-      }));
-
-      return NextResponse.json({ submissions: sanitized });
     }
+
+    // === LOCAL STORE FALLBACK ===
+    const rawSubmissions = localStore.getSubmissions({
+      teamId: teamId || undefined,
+      status: status || undefined,
+    });
+
+    if (isJudge) {
+      return NextResponse.json({ submissions: rawSubmissions });
+    }
+
+    const sanitized = rawSubmissions.map((sub: any) => ({
+      id: sub.id,
+      teamId: sub.teamId,
+      team: sub.team,
+      description: sub.description,
+      codeSnippet: sub.codeSnippet,
+      screenshotUrl: sub.screenshotUrl,
+      status: sub.status,
+      awardedPoints: sub.awardedPoints,
+      isSpeedBonus: sub.isSpeedBonus,
+      createdAt: sub.createdAt,
+      matchedBug:
+        sub.status === "VERIFIED" && sub.matchedBug
+          ? {
+              id: sub.matchedBug.id,
+              title: sub.matchedBug.title,
+              category: sub.matchedBug.category,
+            }
+          : null,
+    }));
+
+    return NextResponse.json({ submissions: sanitized });
   } catch (err: any) {
     return NextResponse.json(
       { error: "Failed to fetch submissions", details: err.message },
@@ -176,94 +183,84 @@ export async function POST(req: NextRequest) {
     let awardedPoints = 0;
     let isSpeedBonus = false;
 
-    // 4. Persist to PostgreSQL if available
-    try {
-      const dbTeam = await prisma.team.findUnique({
-        where: { id: teamId },
-      });
+    // 4. Persist to PostgreSQL only if DB is reachable
+    if (isDbActiveSync()) {
+      try {
+        const dbTeam = await prisma.team.findUnique({ where: { id: teamId } });
 
-      if (dbTeam) {
-        if (isAutoVerified && aiResult.matchedBugId) {
-          // Check if this team has ALREADY been awarded points for this bug
-          const alreadyVerified = await prisma.regularSubmission.findFirst({
-            where: {
-              teamId,
-              matchedBugId: aiResult.matchedBugId,
-              status: "VERIFIED",
-              awardedPoints: { gt: 0 },
-            },
-          });
-
-          if (alreadyVerified) {
-            awardedPoints = 0;
-            isSpeedBonus = false;
-            aiResult.reasoning = `[DUPLICATE] Team has already been credited points for Bug ${aiResult.matchedBugId}. Duplicate submissions for the same defect do not award additional score.`;
-          } else {
-            const bug = await prisma.masterBug.findUnique({
-              where: { id: aiResult.matchedBugId },
-            });
-
-            if (bug) {
-              if (!bug.isFirstFound) {
-                isSpeedBonus = true;
-                await prisma.masterBug.update({
-                  where: { id: aiResult.matchedBugId },
-                  data: {
-                    isFirstFound: true,
-                    firstFoundById: teamId,
-                  },
-                });
-              }
-              awardedPoints = calculateRegularPoints(bug.category, isSpeedBonus);
-            } else {
-              awardedPoints = 3;
-            }
-
-            // Credit team score and valid bug count
-            await prisma.team.update({
-              where: { id: teamId },
-              data: {
-                totalScore: { increment: awardedPoints },
-                validBugsCount: { increment: 1 },
+        if (dbTeam) {
+          if (isAutoVerified && aiResult.matchedBugId) {
+            const alreadyVerified = await prisma.regularSubmission.findFirst({
+              where: {
+                teamId,
+                matchedBugId: aiResult.matchedBugId,
+                status: "VERIFIED",
+                awardedPoints: { gt: 0 },
               },
             });
 
-            // Check for 10-bug milestone award (+10 pts)
-            await evaluateMilestoneBonus(teamId);
+            if (alreadyVerified) {
+              awardedPoints = 0;
+              isSpeedBonus = false;
+              aiResult.reasoning = `[DUPLICATE] Team has already been credited points for Bug ${aiResult.matchedBugId}. Duplicate submissions for the same defect do not award additional score.`;
+            } else {
+              const bug = await prisma.masterBug.findUnique({
+                where: { id: aiResult.matchedBugId },
+              });
+
+              if (bug) {
+                if (!bug.isFirstFound) {
+                  isSpeedBonus = true;
+                  await prisma.masterBug.update({
+                    where: { id: aiResult.matchedBugId },
+                    data: { isFirstFound: true, firstFoundById: teamId },
+                  });
+                }
+                awardedPoints = calculateRegularPoints(bug.category, isSpeedBonus);
+              } else {
+                awardedPoints = 3;
+              }
+
+              await prisma.team.update({
+                where: { id: teamId },
+                data: {
+                  totalScore: { increment: awardedPoints },
+                  validBugsCount: { increment: 1 },
+                },
+              });
+
+              await evaluateMilestoneBonus(teamId);
+            }
           }
+
+          await prisma.regularSubmission.create({
+            data: {
+              id: submissionId,
+              teamId,
+              description: initialRecord.description,
+              codeSnippet: initialRecord.codeSnippet || null,
+              screenshotUrl: initialRecord.screenshotUrl || null,
+              status: targetStatus,
+              matchedBugId: aiResult.matchedBugId,
+              llmConfidence: aiResult.confidence,
+              llmReasoning: aiResult.reasoning,
+              awardedPoints,
+              isSpeedBonus,
+            },
+          });
+
+          return NextResponse.json({
+            success: true,
+            submission: { id: submissionId, teamId, status: targetStatus, createdAt: initialRecord.createdAt },
+            message: isAutoVerified
+              ? "Report verified and points awarded!"
+              : "Report received and queued for review.",
+          });
         }
-
-        await prisma.regularSubmission.create({
-          data: {
-            id: submissionId,
-            teamId,
-            description: initialRecord.description,
-            codeSnippet: initialRecord.codeSnippet || null,
-            screenshotUrl: initialRecord.screenshotUrl || null,
-            status: targetStatus,
-            matchedBugId: aiResult.matchedBugId,
-            llmConfidence: aiResult.confidence,
-            llmReasoning: aiResult.reasoning,
-            awardedPoints,
-            isSpeedBonus,
-          },
-        });
-
-        return NextResponse.json({
-          success: true,
-          submission: {
-            id: submissionId,
-            teamId,
-            status: targetStatus,
-            createdAt: initialRecord.createdAt,
-          },
-          message: isAutoVerified
-            ? "Report verified and points awarded!"
-            : "Report received and queued for review.",
-        });
+      } catch (dbErr: any) {
+        markDbOffline();
+        console.warn("[api/submissions POST] DB offline, serving via disk store:", dbErr.message);
       }
-    } catch (dbErr) {
-      console.warn("[api/submissions] Database offline locally, served via disk store.");
     }
 
     // 5. Fallback to Local Store with disk persistence
@@ -294,12 +291,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      submission: {
-        id: submissionId,
-        teamId,
-        status: targetStatus,
-        createdAt: initialRecord.createdAt,
-      },
+      submission: { id: submissionId, teamId, status: targetStatus, createdAt: initialRecord.createdAt },
       message: isAutoVerified
         ? "Report verified and points awarded!"
         : "Report received and queued for review.",

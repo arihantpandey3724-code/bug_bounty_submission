@@ -51,7 +51,7 @@ class LocalStore {
   }
 
   private init() {
-    // 1. Teams (starts empty - no mock/demo teams)
+    // 1. Seed DEMO_TEAMS as base (no mock scores)
     this.teams = DEMO_TEAMS.map((t, idx) => ({
       id: `team-${idx + 1}`,
       name: t.name,
@@ -83,6 +83,58 @@ class LocalStore {
         verifiedReports: 0,
       });
     });
+
+    // 4. Hydrate teams and scores from disk backup so leaderboard is correct after restart
+    try {
+      const allSubs = readDiskBackups();
+      for (const sub of allSubs) {
+        // Register team if not already known
+        if (!this.teams.find((t) => t.id === sub.teamId)) {
+          this.teams.push({
+            id: sub.teamId,
+            name: sub.teamName || "Team",
+            email: "",
+            totalScore: 0,
+            validBugsCount: 0,
+            hasMilestoneBonus: false,
+            createdAt: sub.createdAt,
+          });
+        }
+        // Rebuild scores from verified submissions only
+        if (sub.status === "VERIFIED" && sub.awardedPoints > 0) {
+          const team = this.teams.find((t) => t.id === sub.teamId);
+          if (team) {
+            team.totalScore += sub.awardedPoints;
+            team.validBugsCount += 1;
+            if (team.validBugsCount >= 10 && !team.hasMilestoneBonus) {
+              team.hasMilestoneBonus = true;
+              if (!this.milestoneAwardedTo) {
+                this.milestoneAwardedTo = team.id;
+                this.milestoneAwardedAt = sub.createdAt;
+              }
+            }
+          }
+        }
+        // Rebuild master bug first-found state
+        if (sub.isSpeedBonus && sub.matchedBugId && this.bugs.has(sub.matchedBugId)) {
+          const b = this.bugs.get(sub.matchedBugId)!;
+          if (!b.isFirstFound) {
+            b.isFirstFound = true;
+            b.firstFoundById = sub.teamId;
+            b.firstFoundByTeam = sub.teamName || "Team";
+          }
+        }
+        // Rebuild totalReports / verifiedReports on master bugs
+        if (sub.matchedBugId && this.bugs.has(sub.matchedBugId)) {
+          const b = this.bugs.get(sub.matchedBugId)!;
+          b.totalReports += 1;
+          if (sub.status === "VERIFIED") b.verifiedReports += 1;
+        }
+      }
+      console.log(`[localStore] Hydrated ${this.teams.length} teams and ${allSubs.length} submissions from disk backup.`);
+    } catch (e) {
+      console.warn("[localStore] Could not hydrate from disk backup:", e);
+    }
   }
 
   /**
