@@ -13,7 +13,7 @@ interface SubmissionItem {
   status: string;
   matchedBugId: string | null;
   matchedBug?: {
-    id: string;
+    id?: string;
     title: string;
     category: string;
   } | null;
@@ -150,7 +150,7 @@ export default function MySubmissionsPage() {
                   <div className="flex items-center space-x-2">
                     <span className="font-semibold text-neutral-900 text-base">
                       {isVerified && sub.matchedBug
-                        ? `[${sub.matchedBug.id}] ${sub.matchedBug.title}`
+                        ? sub.matchedBug.title
                         : `Report #${sub.id.slice(0, 16)}`}
                     </span>
                     {isVerified && sub.matchedBug?.category && (

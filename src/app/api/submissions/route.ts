@@ -64,7 +64,6 @@ export async function GET(req: NextRequest) {
           matchedBug:
             sub.status === "VERIFIED" && sub.matchedBug
               ? {
-                  id: sub.matchedBug.id,
                   title: sub.matchedBug.title,
                   category: sub.matchedBug.category,
                 }
@@ -102,7 +101,6 @@ export async function GET(req: NextRequest) {
       matchedBug:
         sub.status === "VERIFIED" && sub.matchedBug
           ? {
-              id: sub.matchedBug.id,
               title: sub.matchedBug.title,
               category: sub.matchedBug.category,
             }
