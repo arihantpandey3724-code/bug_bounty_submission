@@ -47,12 +47,19 @@ export async function GET() {
         };
       });
 
-      return NextResponse.json({
-        leaderboard,
-        milestoneBonusClaimedBy: milestone?.awardedToTeamId || null,
-        milestoneBonusClaimedAt: milestone?.awardedAt || null,
-        updatedAt: new Date().toISOString(),
-      });
+      return NextResponse.json(
+        {
+          leaderboard,
+          milestoneBonusClaimedBy: milestone?.awardedToTeamId || null,
+          milestoneBonusClaimedAt: milestone?.awardedAt || null,
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          headers: {
+            "Cache-Control": "public, s-maxage=3, stale-while-revalidate=5",
+          },
+        }
+      );
     } catch (err: any) {
       markDbOffline();
       console.warn("[api/leaderboard] DB offline, switching to localStore:", err.message);
@@ -88,10 +95,17 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({
-    leaderboard,
-    milestoneBonusClaimedBy: localStore.milestoneAwardedTo,
-    milestoneBonusClaimedAt: localStore.milestoneAwardedAt,
-    updatedAt: new Date().toISOString(),
-  });
+  return NextResponse.json(
+    {
+      leaderboard,
+      milestoneBonusClaimedBy: localStore.milestoneAwardedTo,
+      milestoneBonusClaimedAt: localStore.milestoneAwardedAt,
+      updatedAt: new Date().toISOString(),
+    },
+    {
+      headers: {
+        "Cache-Control": "public, s-maxage=3, stale-while-revalidate=5",
+      },
+    }
+  );
 }

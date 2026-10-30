@@ -15,6 +15,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const body = await req.json().catch(() => ({}));
+  if (body?.onlyStressSubmissions) {
+    try {
+      const del = await prisma.regularSubmission.deleteMany({
+        where: { description: { startsWith: "[STRESS-TEST" } },
+      });
+      return NextResponse.json({
+        success: true,
+        message: `Deleted ${del.count} synthetic stress-test submissions.`,
+        deletedCount: del.count,
+      });
+    } catch (err: any) {
+      return NextResponse.json({ error: err.message }, { status: 500 });
+    }
+  }
+
   const results: any = {
     prismaReset: false,
     localStoreReset: false,

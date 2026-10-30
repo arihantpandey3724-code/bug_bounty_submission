@@ -174,11 +174,20 @@ export async function evaluateSubmissionWithAI({
   codeSnippet?: string | null;
   screenshotUrl?: string | null;
 }): Promise<EvaluationResult> {
+  // 1. FAST-PATH HEURISTIC MATCHING:
+  // Runs in 0.1ms in-memory with zero network overhead.
+  const heuristicCandidate = heuristicEvaluate(description, codeSnippet);
+
+  // If local heuristic detects a confident match (>= 0.75), return immediately!
+  // This guarantees sub-second response times and prevents Gemini rate limits from blocking submissions.
+  if (heuristicCandidate.matchedBugId && heuristicCandidate.confidence >= 0.75) {
+    return heuristicCandidate;
+  }
+
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey || apiKey.trim().length === 0) {
-    console.log("[gemini] GEMINI_API_KEY not configured. Running intelligent heuristic evaluation.");
-    return heuristicEvaluate(description, codeSnippet);
+    return heuristicCandidate;
   }
 
   try {
@@ -258,11 +267,11 @@ Respond ONLY with the JSON object. Do not include markdown code fence formatting
       }
     }
 
-    const GEMINI_TIMEOUT_MS = 3000;
+    const GEMINI_TIMEOUT_MS = 2000;
     let timer: NodeJS.Timeout | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
-        reject(new Error("Gemini AI evaluation timed out after 3000ms"));
+        reject(new Error("Gemini AI evaluation timed out after 2000ms"));
       }, GEMINI_TIMEOUT_MS);
     });
 
@@ -293,8 +302,8 @@ Respond ONLY with the JSON object. Do not include markdown code fence formatting
           : "UNVERIFIED",
       reasoning: parsed.reasoning || "Evaluated by Gemini AI.",
     };
-  } catch (err) {
-    console.warn("[gemini] Error during Google Gen AI evaluation, falling back to heuristic:", err);
-    return heuristicEvaluate(description, codeSnippet);
+  } catch (err: any) {
+    console.warn("[gemini] Gemini evaluation bypassed/failed, falling back cleanly to heuristic/judge queue:", err.message);
+    return heuristicCandidate;
   }
 }

@@ -19,6 +19,8 @@ model Team {
   createdAt         DateTime             @default(now())
   submissions       RegularSubmission[]
   claimedTreasures  TreasureBug[]
+
+  @@index([totalScore(sort: Desc)])
 }
 
 model MasterBug {
@@ -51,6 +53,11 @@ model RegularSubmission {
   llmReasoning   String?    @db.Text
   judgeOverride  Boolean    @default(false)
   createdAt      DateTime   @default(now())
+
+  @@index([teamId])
+  @@index([status])
+  @@index([matchedBugId])
+  @@index([createdAt])
 }
 
 model TreasureBug {

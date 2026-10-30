@@ -192,10 +192,80 @@ export async function POST(req: NextRequest) {
     // 4. Persist to PostgreSQL only if DB is reachable
     if (isDbActiveSync()) {
       try {
+        if (!isAutoVerified) {
+          // ULTRA-FAST PATH: 1 single direct insert for queued/triage reports
+          try {
+            await prisma.regularSubmission.create({
+              data: {
+                id: submissionId,
+                teamId,
+                description: initialRecord.description,
+                codeSnippet: initialRecord.codeSnippet || null,
+                screenshotUrl: initialRecord.screenshotUrl || null,
+                status: targetStatus,
+                matchedBugId: aiResult.matchedBugId,
+                llmConfidence: aiResult.confidence,
+                llmReasoning: aiResult.reasoning,
+                awardedPoints: 0,
+                isSpeedBonus: false,
+              },
+            });
+
+            return NextResponse.json({
+              success: true,
+              submission: { id: submissionId, teamId, status: targetStatus, createdAt: initialRecord.createdAt },
+              message: "Report received and queued for review.",
+            });
+          } catch (insertErr: any) {
+            // Self-heal team only if foreign key constraint indicates missing team (rare 1% case)
+            if (insertErr.code === "P2003" || insertErr.message?.includes("Foreign key")) {
+              const localTeam = localStore.findTeamById(teamId);
+              const candidateName = localTeam?.name || (body.teamName as string) || `Team_${teamId.slice(-6)}`;
+              const candidateEmail = localTeam?.email || `${candidateName.toLowerCase().replace(/[^a-z0-9]/g, "_")}@entropy-bounty.io`;
+
+              await prisma.team.upsert({
+                where: { name: candidateName },
+                update: {},
+                create: {
+                  id: teamId,
+                  name: candidateName,
+                  email: candidateEmail,
+                  totalScore: 0,
+                  validBugsCount: 0,
+                  hasMilestoneBonus: false,
+                },
+              });
+
+              await prisma.regularSubmission.create({
+                data: {
+                  id: submissionId,
+                  teamId,
+                  description: initialRecord.description,
+                  codeSnippet: initialRecord.codeSnippet || null,
+                  screenshotUrl: initialRecord.screenshotUrl || null,
+                  status: targetStatus,
+                  matchedBugId: aiResult.matchedBugId,
+                  llmConfidence: aiResult.confidence,
+                  llmReasoning: aiResult.reasoning,
+                  awardedPoints: 0,
+                  isSpeedBonus: false,
+                },
+              });
+
+              return NextResponse.json({
+                success: true,
+                submission: { id: submissionId, teamId, status: targetStatus, createdAt: initialRecord.createdAt },
+                message: "Report received and queued for review.",
+              });
+            }
+            throw insertErr;
+          }
+        }
+
+        // AUTO-VERIFIED PATH:
         let dbTeam = await prisma.team.findUnique({ where: { id: teamId } });
 
         if (!dbTeam) {
-          // Self-heal: Ensure team exists in PostgreSQL so foreign key constraint never fails
           const localTeam = localStore.findTeamById(teamId);
           const candidateName = localTeam?.name || (body.teamName as string) || `Team_${teamId.slice(-6)}`;
           const candidateEmail = localTeam?.email || `${candidateName.toLowerCase().replace(/[^a-z0-9]/g, "_")}@entropy-bounty.io`;
