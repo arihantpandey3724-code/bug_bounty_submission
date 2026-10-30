@@ -557,14 +557,13 @@ export const MASTER_BUGS: MasterBugDef[] = [
   },
 ];
 
-// Note: Treasure bug flags are currently withheld/dormant in the storefront.
-// Staged for release when the competition administrator provides trigger instructions.
+// Active Treasure Codes for Entropy 2K26 Competition
 export const INITIAL_TREASURES = [
-  { id: 1, code: "FLAG{7_clicks_unlocked_secret_treasure}" },
-  { id: 2, code: "FLAG{TREASURE_BUG_02_RESERVED}" },
-  { id: 3, code: "FLAG{inspect_element_dom_source_revealed}" },
-  { id: 4, code: "FLAG{TREASURE_BUG_04_RESERVED}" },
-  { id: 5, code: "FLAG{TREASURE_BUG_05_RESERVED}" },
+  { id: 1, code: "TREASURE-ENTROPY-2026" },
+  { id: 2, code: "TREASURE-GOATED-ENTROPY" },
+  { id: 3, code: "TREASURE-MULTI-CLICK" },
+  { id: 4, code: "TREASURE-DOM-INSPECT" },
+  { id: 5, code: "TREASURE-INVOICE-PRINT" },
   { id: 6, code: "FLAG{TREASURE_BUG_06_RESERVED}" },
   { id: 7, code: "FLAG{TREASURE_BUG_07_RESERVED}" },
   { id: 8, code: "FLAG{TREASURE_BUG_08_RESERVED}" },

@@ -1,7 +1,13 @@
 import { PrismaClient } from "@prisma/client";
 import { MASTER_BUGS, INITIAL_TREASURES, DEMO_TEAMS } from "../src/config/masterBugs";
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DIRECT_URL || process.env.DATABASE_URL,
+    },
+  },
+});
 
 async function main() {
   console.log("Seeding Master Bugs...");
@@ -26,7 +32,7 @@ async function main() {
   for (const t of INITIAL_TREASURES) {
     await prisma.treasureBug.upsert({
       where: { id: t.id },
-      update: {},
+      update: { code: t.code },
       create: {
         id: t.id,
         code: t.code,
