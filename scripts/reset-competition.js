@@ -7,10 +7,10 @@ async function main() {
 
   console.log("Cleaning test records from Neon PostgreSQL...");
   await sql`DELETE FROM "RegularSubmission";`;
-  await sql`DELETE FROM "Team";`;
-  await sql`UPDATE "MasterBug" SET "isFirstFound" = false, "firstFoundById" = NULL;`;
   await sql`UPDATE "TreasureBug" SET "isClaimed" = false, "claimedByTeamId" = NULL, "claimedAt" = NULL;`;
+  await sql`UPDATE "MasterBug" SET "isFirstFound" = false, "firstFoundById" = NULL;`;
   await sql`UPDATE "MilestoneTracker" SET "awardedToTeamId" = NULL, "awardedAt" = NULL WHERE "id" = 1;`;
+  await sql`DELETE FROM "Team";`;
 
   console.log("Competition state is 100% clean and ready for event start!");
   const teamCount = await sql`SELECT count(*)::int FROM "Team";`;
