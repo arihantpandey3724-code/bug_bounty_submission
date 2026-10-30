@@ -1,5 +1,5 @@
 import Link from "next/link";
-import prisma from "@/lib/prisma";
+import { sql } from "@/lib/neonClient";
 import localStore from "@/lib/localStore";
 import { Bug, Sparkles, Trophy, ListChecks, Target } from "lucide-react";
 
@@ -13,22 +13,20 @@ export default async function HomePage() {
   let topScore = 0;
 
   try {
-    totalSubmissions = await prisma.regularSubmission.count();
-    verifiedSubmissions = await prisma.regularSubmission.count({
-      where: { status: "VERIFIED" },
-    });
-    const claimedTreasures = await prisma.treasureBug.count({
-      where: { isClaimed: true },
-    });
+    const [subStats, claimedTreasuresRes, leaderRes] = await Promise.all([
+      sql`SELECT COUNT(*)::int as total, COUNT(*) FILTER (WHERE status = 'VERIFIED')::int as verified FROM "RegularSubmission"`,
+      sql`SELECT COUNT(*)::int as claimed FROM "TreasureBug" WHERE "isClaimed" = true`,
+      sql`SELECT name, "totalScore" FROM "Team" ORDER BY "totalScore" DESC LIMIT 1`,
+    ]);
+
+    totalSubmissions = subStats[0]?.total || 0;
+    verifiedSubmissions = subStats[0]?.verified || 0;
+    const claimedTreasures = claimedTreasuresRes[0]?.claimed || 0;
     remainingTreasures = 10 - claimedTreasures;
 
-    const leader = await prisma.team.findFirst({
-      orderBy: { totalScore: "desc" },
-      select: { name: true, totalScore: true },
-    });
-    if (leader) {
-      topTeam = leader.name;
-      topScore = leader.totalScore;
+    if (leaderRes.length > 0) {
+      topTeam = leaderRes[0].name;
+      topScore = leaderRes[0].totalScore;
     }
   } catch (err) {
     // Fallback to local store
