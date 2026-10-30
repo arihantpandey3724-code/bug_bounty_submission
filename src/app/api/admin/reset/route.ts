@@ -21,9 +21,45 @@ export async function POST(req: NextRequest) {
       const del = await prisma.regularSubmission.deleteMany({
         where: { description: { startsWith: "[STRESS-TEST" } },
       });
+
+      // Automatically recalibrate team scores after removing synthetic submissions
+      const teams = await prisma.team.findMany({
+        include: {
+          submissions: { where: { status: "VERIFIED" } },
+        },
+      });
+
+      for (const t of teams) {
+        const totalPoints = t.submissions.reduce((sum, s) => sum + s.awardedPoints, 0);
+        const validCount = t.submissions.length;
+        const hasMilestone = validCount >= 10;
+        await prisma.team.update({
+          where: { id: t.id },
+          data: {
+            totalScore: totalPoints + (hasMilestone ? 10 : 0),
+            validBugsCount: validCount,
+            hasMilestoneBonus: hasMilestone,
+          },
+        });
+      }
+
+      const milestoneWinner = teams.find((t) => t.submissions.length >= 10);
+      await prisma.milestoneTracker.upsert({
+        where: { id: 1 },
+        update: {
+          awardedToTeamId: milestoneWinner ? milestoneWinner.id : null,
+          awardedAt: milestoneWinner ? new Date() : null,
+        },
+        create: {
+          id: 1,
+          awardedToTeamId: milestoneWinner ? milestoneWinner.id : null,
+          awardedAt: milestoneWinner ? new Date() : null,
+        },
+      });
+
       return NextResponse.json({
         success: true,
-        message: `Deleted ${del.count} synthetic stress-test submissions.`,
+        message: `Deleted ${del.count} synthetic stress-test submissions and recalibrated standings.`,
         deletedCount: del.count,
       });
     } catch (err: any) {
