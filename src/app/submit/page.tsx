@@ -106,6 +106,25 @@ export default function SubmitBugPage() {
     setErrorMsg(null);
     setSubmittedResult(null);
 
+    // Client-side zero-loss vault backup
+    const clientVaultId = `local-${Date.now()}`;
+    const vaultItem = {
+      id: clientVaultId,
+      teamId: team.id,
+      description: description.trim(),
+      codeSnippet: codeSnippet.trim() || null,
+      screenshotUrl: screenshotUrl || null,
+      status: "CAPTURED",
+      awardedPoints: 0,
+      isSpeedBonus: false,
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      const vault = JSON.parse(localStorage.getItem("entropy_submission_vault") || "[]");
+      vault.unshift(vaultItem);
+      localStorage.setItem("entropy_submission_vault", JSON.stringify(vault.slice(0, 50)));
+    } catch {}
+
     try {
       const res = await fetch("/api/submissions", {
         method: "POST",
@@ -127,6 +146,16 @@ export default function SubmitBugPage() {
       setDescription("");
       setCodeSnippet("");
       setScreenshotUrl(null);
+
+      // Update vault item with server response
+      try {
+        const vault = JSON.parse(localStorage.getItem("entropy_submission_vault") || "[]");
+        const idx = vault.findIndex((v: any) => v.id === clientVaultId);
+        if (idx >= 0 && data.submission) {
+          vault[idx] = data.submission;
+          localStorage.setItem("entropy_submission_vault", JSON.stringify(vault));
+        }
+      } catch {}
     } catch (err: any) {
       setErrorMsg(err.message || "An error occurred while submitting.");
     } finally {

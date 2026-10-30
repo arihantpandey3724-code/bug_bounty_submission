@@ -31,12 +31,31 @@ export default function MySubmissionsPage() {
     if (!team) return;
     try {
       const res = await fetch(`/api/submissions?teamId=${team.id}`);
+      let serverSubs: any[] = [];
       if (res.ok) {
         const data = await res.json();
-        setSubmissions(data.submissions || []);
+        serverSubs = data.submissions || [];
       }
+
+      // Merge with client-side vault to guarantee zero-loss UI rendering
+      try {
+        const vault = JSON.parse(localStorage.getItem("entropy_submission_vault") || "[]");
+        const serverIds = new Set(serverSubs.map((s: any) => s.id));
+        for (const v of vault) {
+          if (!serverIds.has(v.id)) {
+            serverSubs.unshift(v);
+            serverIds.add(v.id);
+          }
+        }
+      } catch {}
+
+      setSubmissions(serverSubs);
     } catch (err) {
-      console.warn("Failed to load submissions:", err);
+      console.warn("Failed to load submissions, falling back to local vault:", err);
+      try {
+        const vault = JSON.parse(localStorage.getItem("entropy_submission_vault") || "[]");
+        setSubmissions(vault);
+      } catch {}
     } finally {
       setIsLoading(false);
     }
