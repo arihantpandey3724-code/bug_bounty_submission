@@ -267,11 +267,11 @@ Respond ONLY with the JSON object. Do not include markdown code fence formatting
       }
     }
 
-    const GEMINI_TIMEOUT_MS = 2000;
+    const GEMINI_TIMEOUT_MS = 1200;
     let timer: NodeJS.Timeout | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
-        reject(new Error("Gemini AI evaluation timed out after 2000ms"));
+        reject(new Error("Gemini AI evaluation timed out after 1200ms"));
       }, GEMINI_TIMEOUT_MS);
     });
 

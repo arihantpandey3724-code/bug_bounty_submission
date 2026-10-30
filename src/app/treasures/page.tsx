@@ -72,11 +72,12 @@ export default function TreasuresPage() {
 
       setSuccessMsg(data.message || `Treasure Bug claimed! +10 Points awarded!`);
       setFlagCode("");
-      await fetchTreasures();
-      await refreshTeam();
+      setIsClaiming(false);
+
+      // Concurrently refresh treasures and team score in background without blocking UI
+      Promise.all([fetchTreasures(), refreshTeam()]);
     } catch (err: any) {
       setErrorMsg(err.message || "An error occurred while redeeming flag.");
-    } finally {
       setIsClaiming(false);
     }
   }

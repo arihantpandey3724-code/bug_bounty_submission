@@ -39,18 +39,16 @@ export async function POST(req: NextRequest) {
       if (claimed.length > 0) {
         const treasure = claimed[0];
 
-        // Increment team score by 10 points
-        await sql`
+        // Increment team score by 10 points and return new bug count in one query
+        const teamUpdate = await sql`
           UPDATE "Team"
           SET "totalScore" = "totalScore" + 10, "validBugsCount" = "validBugsCount" + 1
-          WHERE id = ${teamId};
+          WHERE id = ${teamId}
+          RETURNING "validBugsCount";
         `;
 
         // Check 10-bug milestone bonus
-        const milestoneCheck = await sql`
-          SELECT "validBugsCount" FROM "Team" WHERE id = ${teamId};
-        `;
-        if (milestoneCheck[0]?.validBugsCount >= 10) {
+        if (teamUpdate[0]?.validBugsCount >= 10) {
           const milestoneClaim = await sql`
             UPDATE "MilestoneTracker"
             SET "awardedToTeamId" = ${teamId}, "awardedAt" = NOW()
