@@ -24,7 +24,13 @@ export default function TreasuresPage() {
 
   async function fetchTreasures() {
     try {
-      const res = await fetch("/api/treasures");
+      const res = await fetch(`/api/treasures?t=${Date.now()}`, {
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
       if (res.ok) {
         const data = await res.json();
         setTreasures(data.treasures || []);

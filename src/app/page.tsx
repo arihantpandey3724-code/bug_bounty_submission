@@ -1,11 +1,17 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { sql } from "@/lib/neonClient";
 import localStore from "@/lib/localStore";
 import { Bug, Sparkles, Trophy, ListChecks, Target } from "lucide-react";
+import LiveMetricsGrid from "@/components/LiveMetricsGrid";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function HomePage() {
+  // Calling headers() explicitly marks this route dynamic and prevents static build-time CDN freezing
+  headers();
+
   let totalSubmissions = 0;
   let verifiedSubmissions = 0;
   let remainingTreasures = 10;
@@ -22,9 +28,9 @@ export default async function HomePage() {
     totalSubmissions = subStats[0]?.total || 0;
     verifiedSubmissions = subStats[0]?.verified || 0;
     const claimedTreasures = claimedTreasuresRes[0]?.claimed || 0;
-    remainingTreasures = 10 - claimedTreasures;
+    remainingTreasures = Math.max(0, 10 - claimedTreasures);
 
-    if (leaderRes.length > 0) {
+    if (leaderRes.length > 0 && leaderRes[0].totalScore > 0) {
       topTeam = leaderRes[0].name;
       topScore = leaderRes[0].totalScore;
     }
@@ -33,7 +39,7 @@ export default async function HomePage() {
     totalSubmissions = localStore.getSubmissions().length;
     verifiedSubmissions = localStore.getSubmissions({ status: "VERIFIED" }).length;
     const claimed = localStore.getTreasures().filter((t) => t.isClaimed).length;
-    remainingTreasures = 10 - claimed;
+    remainingTreasures = Math.max(0, 10 - claimed);
     const teams = [...localStore.getTeams()].sort((a, b) => b.totalScore - a.totalScore);
     if (teams.length > 0 && teams[0].totalScore > 0) {
       topTeam = teams[0].name;
@@ -77,44 +83,14 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* Live Metrics Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-neutral-100">
-          <div className="p-4 bg-neutral-50/70 border border-neutral-200/80 rounded-md">
-            <span className="text-xs text-neutral-500 font-sans font-medium block">
-              Reports Filed
-            </span>
-            <span className="text-2xl font-bold text-neutral-900 mt-1 block font-sans">
-              {totalSubmissions}
-            </span>
-          </div>
-
-          <div className="p-4 bg-neutral-50/70 border border-neutral-200/80 rounded-md">
-            <span className="text-xs text-neutral-500 font-sans font-medium block">
-              Verified Bugs
-            </span>
-            <span className="text-2xl font-bold text-emerald-700 mt-1 block font-sans">
-              {verifiedSubmissions}
-            </span>
-          </div>
-
-          <div className="p-4 bg-neutral-50/70 border border-neutral-200/80 rounded-md">
-            <span className="text-xs text-neutral-500 font-sans font-medium block">
-              Treasures Left
-            </span>
-            <span className="text-2xl font-bold text-amber-700 mt-1 block font-sans">
-              {remainingTreasures} <span className="text-sm text-neutral-400 font-normal">/ 10</span>
-            </span>
-          </div>
-
-          <div className="p-4 bg-neutral-50/70 border border-neutral-200/80 rounded-md">
-            <span className="text-xs text-neutral-500 font-sans font-medium block">
-              Current Leader
-            </span>
-            <span className="text-base font-semibold text-neutral-900 mt-1 truncate block font-sans">
-              {topTeam} {topScore > 0 ? `(${topScore} pts)` : ""}
-            </span>
-          </div>
-        </div>
+        {/* Live Metrics Grid with dynamic auto-sync */}
+        <LiveMetricsGrid
+          initialTotal={totalSubmissions}
+          initialVerified={verifiedSubmissions}
+          initialRemaining={remainingTreasures}
+          initialTopTeam={topTeam}
+          initialTopScore={topScore}
+        />
       </div>
 
       {/* Main Navigation Cards */}

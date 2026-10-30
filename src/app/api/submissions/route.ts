@@ -8,17 +8,25 @@ import { isJudgeAuthorized } from "@/lib/judgeAuth";
 import { calculateRegularPoints } from "@/lib/scoring";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
+  const headers = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+    Pragma: "no-cache",
+    Expires: "0",
+  };
+
   try {
     const { searchParams } = new URL(req.url);
     const teamId = searchParams.get("teamId");
+    const status = searchParams.get("status");
     const isJudge = isJudgeAuthorized(req);
 
     if (!teamId && !isJudge) {
       return NextResponse.json(
         { error: "Unauthorized: teamId parameter or Judge authentication is required." },
-        { status: 401 }
+        { status: 401, headers }
       );
     }
 
@@ -35,29 +43,42 @@ export async function GET(req: NextRequest) {
           WHERE s."teamId" = ${teamId}
           ORDER BY s."createdAt" DESC;
         `;
-        return NextResponse.json({ submissions: rawSubmissions });
+        return NextResponse.json({ submissions: rawSubmissions }, { headers });
       }
 
       if (isJudge) {
-        const rawSubmissions = await sql`
-          SELECT s.id, s."teamId", s.description, s."codeSnippet", s."screenshotUrl",
-                 s.status, s."awardedPoints", s."isSpeedBonus", s."matchedBugId", s."createdAt",
-                 json_build_object('id', t.id, 'name', t.name, 'email', t.email) as team,
-                 case when b.id is not null then json_build_object('title', b.title, 'category', b.category) else null end as "matchedBug"
-          FROM "RegularSubmission" s
-          JOIN "Team" t ON t.id = s."teamId"
-          LEFT JOIN "MasterBug" b ON b.id = s."matchedBugId"
-          ORDER BY s."createdAt" DESC;
-        `;
-        return NextResponse.json({ submissions: rawSubmissions });
+        const rawSubmissions = status && status !== "ALL"
+          ? await sql`
+              SELECT s.id, s."teamId", s.description, s."codeSnippet", s."screenshotUrl",
+                     s.status, s."awardedPoints", s."isSpeedBonus", s."matchedBugId", s."createdAt",
+                     json_build_object('id', t.id, 'name', t.name, 'email', t.email) as team,
+                     case when b.id is not null then json_build_object('title', b.title, 'category', b.category) else null end as "matchedBug"
+              FROM "RegularSubmission" s
+              JOIN "Team" t ON t.id = s."teamId"
+              LEFT JOIN "MasterBug" b ON b.id = s."matchedBugId"
+              WHERE s.status = ${status}
+              ORDER BY s."createdAt" DESC;
+            `
+          : await sql`
+              SELECT s.id, s."teamId", s.description, s."codeSnippet", s."screenshotUrl",
+                     s.status, s."awardedPoints", s."isSpeedBonus", s."matchedBugId", s."createdAt",
+                     json_build_object('id', t.id, 'name', t.name, 'email', t.email) as team,
+                     case when b.id is not null then json_build_object('title', b.title, 'category', b.category) else null end as "matchedBug"
+              FROM "RegularSubmission" s
+              JOIN "Team" t ON t.id = s."teamId"
+              LEFT JOIN "MasterBug" b ON b.id = s."matchedBugId"
+              ORDER BY s."createdAt" DESC;
+            `;
+        return NextResponse.json({ submissions: rawSubmissions }, { headers });
       }
 
-      return NextResponse.json({ submissions: [] });
+      return NextResponse.json({ submissions: [] }, { headers });
     } catch (neonErr: any) {
       console.warn("[api/submissions GET] Neon HTTP fallback to Prisma:", neonErr.message);
 
       const where: any = {};
       if (teamId) where.teamId = teamId;
+      if (status && status !== "ALL") where.status = status;
 
       const rawSubmissions = await prisma.regularSubmission.findMany({
         where,
@@ -68,12 +89,12 @@ export async function GET(req: NextRequest) {
         },
       });
 
-      return NextResponse.json({ submissions: rawSubmissions });
+      return NextResponse.json({ submissions: rawSubmissions }, { headers });
     }
   } catch (err: any) {
     return NextResponse.json(
       { error: "Failed to fetch submissions", details: err.message },
-      { status: 500 }
+      { status: 500, headers }
     );
   }
 }

@@ -4,11 +4,14 @@ import prisma from "@/lib/prisma";
 import { isJudgeAuthorized } from "@/lib/judgeAuth";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
   const isJudge = isJudgeAuthorized(req);
   const headers = {
     "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+    Pragma: "no-cache",
+    Expires: "0",
   };
 
   try {

@@ -107,7 +107,10 @@ export default function JudgeConsole() {
   async function loadTriageSubmissions() {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/submissions?status=${statusFilter}`);
+      const res = await fetch(`/api/submissions?status=${statusFilter}&t=${Date.now()}`, {
+        cache: "no-store",
+        headers: { "Pragma": "no-cache", "Cache-Control": "no-cache" },
+      });
       if (res.ok) {
         const data = await res.json();
         setSubmissions(data.submissions || []);
@@ -368,6 +371,9 @@ export default function JudgeConsole() {
   }
 
   const filteredSubmissions = submissions.filter((sub) => {
+    if (statusFilter !== "ALL" && sub.status !== statusFilter) {
+      return false;
+    }
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
