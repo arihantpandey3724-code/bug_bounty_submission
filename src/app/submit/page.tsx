@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useTeam } from "@/context/TeamContext";
-import { Bug, Upload, AlertCircle, FileCode2, Image as ImageIcon, X, Clock } from "lucide-react";
+import { Bug, Upload, AlertCircle, FileCode2, Image as ImageIcon, X, Clock, Database, HardDrive, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 
 export default function SubmitBugPage() {
@@ -157,7 +157,16 @@ export default function SubmitBugPage() {
         }
       } catch {}
     } catch (err: any) {
-      setErrorMsg(err.message || "An error occurred while submitting.");
+      console.warn("Network submission failed, saved safely to local device vault:", err);
+      // Give the user full confidence that their work was preserved locally
+      setSubmittedResult({
+        ...vaultItem,
+        isOfflineSaved: true,
+      });
+      setDescription("");
+      setCodeSnippet("");
+      setScreenshotUrl(null);
+      setErrorMsg(null);
     } finally {
       setIsSubmitting(false);
     }
@@ -223,21 +232,44 @@ export default function SubmitBugPage() {
         </div>
       )}
 
-      {/* Success Notification */}
+      {/* Submission Status Notification */}
       {submittedResult && (
-        <div className="p-5 bg-neutral-50 border border-neutral-200 rounded-lg space-y-3 font-sans text-sm shadow-xs">
+        <div
+          className={`p-5 rounded-lg space-y-3 font-sans text-sm shadow-xs border ${
+            typeof submittedResult.id === "string" && submittedResult.id.startsWith("sub-")
+              ? "bg-emerald-50/50 border-emerald-300"
+              : "bg-amber-50/60 border-amber-300"
+          }`}
+        >
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-            <div>
+            <div className="space-y-1">
+              <div className="flex items-center space-x-2">
+                {typeof submittedResult.id === "string" && submittedResult.id.startsWith("sub-") ? (
+                  <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold">
+                    <Database className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>🟢 Confirmed Stored in Cloud Database</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-xs font-semibold">
+                    <HardDrive className="w-3.5 h-3.5 text-amber-700" />
+                    <span>🟡 Saved Locally on Device (Awaiting Network)</span>
+                  </span>
+                )}
+              </div>
               <h3 className="text-base font-semibold text-neutral-900">
-                Bug report submitted successfully
+                {typeof submittedResult.id === "string" && submittedResult.id.startsWith("sub-")
+                  ? "Bug report submitted and stored in central database!"
+                  : "Bug report saved safely in your browser's local vault!"}
               </h3>
-              <p className="text-sm text-neutral-600 mt-0.5">
-                The judges have received your report and will review your reproduction steps shortly.
+              <p className="text-sm text-neutral-600">
+                {typeof submittedResult.id === "string" && submittedResult.id.startsWith("sub-")
+                  ? "Your finding has been written directly to PostgreSQL. The scoring engine and judges have direct access to your submission."
+                  : "Your report is 100% saved on this computer. It will automatically sync to the database as soon as network is restored, or you can click sync in My Submissions."}
               </p>
             </div>
             <Link
               href="/my-submissions"
-              className="px-3.5 py-1.5 text-xs font-medium text-neutral-900 bg-white border border-neutral-300 hover:bg-neutral-100 rounded-md transition-colors flex-shrink-0 self-start"
+              className="px-3.5 py-1.5 text-xs font-medium text-neutral-900 bg-white border border-neutral-300 hover:bg-neutral-100 rounded-md transition-colors flex-shrink-0 self-start shadow-xs"
             >
               View your submissions →
             </Link>
@@ -251,8 +283,8 @@ export default function SubmitBugPage() {
               </strong>
             </div>
             <div className="flex items-center">
-              <span>Reference ID:</span>
-              <code className="ml-1.5 px-2 py-0.5 bg-neutral-200/60 text-neutral-700 rounded font-mono text-[11px]">
+              <span>{typeof submittedResult.id === "string" && submittedResult.id.startsWith("sub-") ? "Cloud DB ID:" : "Local Vault ID:"}</span>
+              <code className="ml-1.5 px-2 py-0.5 bg-neutral-100 text-neutral-800 rounded font-mono text-[11px] border border-neutral-200">
                 {submittedResult.id}
               </code>
             </div>

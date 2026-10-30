@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useTeam } from "@/context/TeamContext";
-import { ListChecks, CheckCircle2, Clock, XCircle, Zap, RefreshCw } from "lucide-react";
+import { ListChecks, CheckCircle2, Clock, XCircle, Zap, RefreshCw, Database, HardDrive, AlertCircle } from "lucide-react";
 import Link from "next/link";
 
 interface SubmissionItem {
@@ -26,6 +26,48 @@ export default function MySubmissionsPage() {
   const { team, setIsAuthModalOpen, refreshTeam } = useTeam();
   const [submissions, setSubmissions] = useState<SubmissionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  async function syncLocalVault() {
+    if (!team) return;
+    try {
+      const vault = JSON.parse(localStorage.getItem("entropy_submission_vault") || "[]");
+      const pendingItems = vault.filter((v: any) => typeof v.id === "string" && v.id.startsWith("local-"));
+      if (pendingItems.length === 0) return;
+
+      setIsSyncing(true);
+      for (const item of pendingItems) {
+        try {
+          const res = await fetch("/api/submissions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              teamId: team.id,
+              description: item.description,
+              codeSnippet: item.codeSnippet,
+              screenshotUrl: item.screenshotUrl,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const updatedVault = JSON.parse(localStorage.getItem("entropy_submission_vault") || "[]");
+            const idx = updatedVault.findIndex((x: any) => x.id === item.id);
+            if (idx >= 0 && data.submission) {
+              updatedVault[idx] = data.submission;
+              localStorage.setItem("entropy_submission_vault", JSON.stringify(updatedVault));
+            }
+          }
+        } catch (syncErr) {
+          console.warn("Background sync retry error:", syncErr);
+        }
+      }
+      await fetchSubmissions();
+      refreshTeam();
+    } catch {} finally {
+      setIsSyncing(false);
+    }
+  }
 
   async function fetchSubmissions() {
     if (!team) return;
@@ -64,6 +106,16 @@ export default function MySubmissionsPage() {
   useEffect(() => {
     if (team) {
       fetchSubmissions();
+      syncLocalVault();
+
+      // Auto-sync whenever device reconnects to Wi-Fi/Internet
+      window.addEventListener("online", syncLocalVault);
+      const interval = setInterval(syncLocalVault, 15000);
+
+      return () => {
+        window.removeEventListener("online", syncLocalVault);
+        clearInterval(interval);
+      };
     } else {
       setIsLoading(false);
     }
@@ -92,6 +144,8 @@ export default function MySubmissionsPage() {
   const verifiedCount = submissions.filter((s) => s.status === "VERIFIED").length;
   const speedBonusCount = submissions.filter((s) => s.isSpeedBonus).length;
   const pendingCount = submissions.filter((s) => s.status === "UNVERIFIED").length;
+  const cloudCount = submissions.filter((s) => typeof s.id === "string" && s.id.startsWith("sub-")).length;
+  const localPendingCount = submissions.filter((s) => typeof s.id === "string" && s.id.startsWith("local-")).length;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -113,12 +167,14 @@ export default function MySubmissionsPage() {
           <button
             onClick={() => {
               fetchSubmissions();
+              syncLocalVault();
               refreshTeam();
             }}
-            className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-sans font-medium text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-md transition-colors"
+            disabled={isSyncing}
+            className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-sans font-medium text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-md transition-colors disabled:opacity-50"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Refresh</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+            <span>{isSyncing ? "Syncing..." : "Sync / Refresh"}</span>
           </button>
           <Link
             href="/submit"
@@ -129,21 +185,56 @@ export default function MySubmissionsPage() {
         </div>
       </div>
 
+      {/* Sync Banner if pending local items exist */}
+      {localPendingCount > 0 && (
+        <div className="p-4 bg-amber-50 border border-amber-300 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950 font-sans shadow-xs">
+          <div className="flex items-start space-x-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold text-sm block">
+                {localPendingCount} Bug Report{localPendingCount > 1 ? "s" : ""} Saved Locally on this Device
+              </span>
+              <span className="text-xs text-amber-800">
+                These reports are safely preserved on your computer. When you have internet, click &quot;Sync to Cloud Database&quot; to commit them to the central database and calculate points.
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={syncLocalVault}
+            disabled={isSyncing}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-md shadow-xs flex items-center justify-center space-x-1.5 transition-colors disabled:opacity-50 flex-shrink-0"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+            <span>{isSyncing ? "Syncing..." : "Sync to Cloud Database"}</span>
+          </button>
+        </div>
+      )}
+
       {/* Stats Bar */}
-      <div className="grid grid-cols-3 gap-3 text-sm font-sans">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-sans">
         <div className="p-4 bg-white border border-neutral-200 rounded-lg shadow-xs">
           <span className="text-xs text-neutral-500 font-medium block">Total Reports</span>
           <span className="text-2xl font-bold text-neutral-900 mt-1 block">{submissions.length}</span>
         </div>
         <div className="p-4 bg-white border border-neutral-200 rounded-lg shadow-xs">
-          <span className="text-xs text-emerald-700 font-medium block">Verified Bugs</span>
-          <span className="text-2xl font-bold text-emerald-700 mt-1 block">
-            {verifiedCount} {speedBonusCount > 0 ? <span className="text-xs text-amber-700 font-medium">({speedBonusCount} Speed)</span> : ""}
+          <span className="text-xs text-emerald-700 font-medium flex items-center space-x-1">
+            <Database className="w-3.5 h-3.5" />
+            <span>In Cloud DB</span>
           </span>
+          <span className="text-2xl font-bold text-emerald-700 mt-1 block">{cloudCount}</span>
         </div>
         <div className="p-4 bg-white border border-neutral-200 rounded-lg shadow-xs">
-          <span className="text-xs text-neutral-600 font-medium block">Pending</span>
-          <span className="text-2xl font-bold text-neutral-800 mt-1 block">{pendingCount}</span>
+          <span className="text-xs text-amber-700 font-medium flex items-center space-x-1">
+            <HardDrive className="w-3.5 h-3.5" />
+            <span>Local Vault</span>
+          </span>
+          <span className="text-2xl font-bold text-amber-700 mt-1 block">{localPendingCount}</span>
+        </div>
+        <div className="p-4 bg-white border border-neutral-200 rounded-lg shadow-xs">
+          <span className="text-xs text-emerald-800 font-medium block">Verified Points</span>
+          <span className="text-2xl font-bold text-emerald-800 mt-1 block">
+            {team.totalScore} <span className="text-xs font-normal text-neutral-500">({verifiedCount} bugs)</span>
+          </span>
         </div>
       </div>
 
@@ -158,6 +249,8 @@ export default function MySubmissionsPage() {
             const isVerified = sub.status === "VERIFIED";
             const isRejected = sub.status === "REJECTED";
             const isPending = sub.status === "UNVERIFIED";
+            const isCloud = typeof sub.id === "string" && sub.id.startsWith("sub-");
+            const isLocal = typeof sub.id === "string" && sub.id.startsWith("local-");
 
             return (
               <div
@@ -179,7 +272,20 @@ export default function MySubmissionsPage() {
                     )}
                   </div>
 
-                  <div className="flex items-center space-x-2 self-start sm:self-auto text-xs">
+                  <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto text-xs">
+                    {/* Storage Status Pill */}
+                    {isCloud ? (
+                      <span className="px-2.5 py-1 bg-emerald-50 text-emerald-900 font-medium rounded-md flex items-center space-x-1 border border-emerald-200" title="Permanently committed to Cloud PostgreSQL Database">
+                        <Database className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Cloud Database</span>
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-1 bg-amber-50 text-amber-900 font-medium rounded-md flex items-center space-x-1 border border-amber-300" title="Safely stored on this device; awaiting sync to cloud">
+                        <HardDrive className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Device Local Vault</span>
+                      </span>
+                    )}
+
                     {sub.isSpeedBonus && (
                       <span className="px-2.5 py-1 bg-amber-50 text-amber-900 font-medium rounded-md flex items-center space-x-1 border border-amber-200">
                         <Zap className="w-3.5 h-3.5 fill-amber-500 text-amber-600" />
@@ -235,7 +341,7 @@ export default function MySubmissionsPage() {
                   </div>
                 )}
 
-                {/* Footer with Clear Timestamp */}
+                {/* Footer with Clear Timestamp and Storage Identifiers */}
                 <div className="text-xs text-neutral-600 pt-2 flex flex-wrap items-center justify-between border-t border-neutral-100 font-sans gap-2">
                   <div className="flex items-center space-x-1.5 text-neutral-700">
                     <Clock className="w-3.5 h-3.5 text-neutral-500" />
@@ -244,7 +350,29 @@ export default function MySubmissionsPage() {
                       {new Date(sub.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} • {new Date(sub.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
                     </strong>
                   </div>
-                  <span className="font-mono text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded text-[11px]">ID: {sub.id}</span>
+
+                  <div className="flex items-center space-x-2">
+                    {isCloud ? (
+                      <span className="font-mono text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[11px] flex items-center space-x-1">
+                        <Database className="w-3 h-3 text-emerald-600 inline" />
+                        <span>Cloud DB ID: {sub.id}</span>
+                      </span>
+                    ) : (
+                      <div className="flex items-center space-x-1.5">
+                        <span className="font-mono text-amber-900 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-[11px] flex items-center space-x-1">
+                          <HardDrive className="w-3 h-3 text-amber-600 inline" />
+                          <span>Local Vault ID: {sub.id}</span>
+                        </span>
+                        <button
+                          onClick={() => syncLocalVault()}
+                          disabled={isSyncing}
+                          className="px-2 py-0.5 bg-amber-600 text-white hover:bg-amber-700 rounded text-[11px] font-medium transition-colors"
+                        >
+                          {isSyncing ? "Syncing..." : "Sync Now"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );
