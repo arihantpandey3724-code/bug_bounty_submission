@@ -1,0 +1,115 @@
+{
+  "totalRequests": 500,
+  "successful": 478,
+  "failed": 22,
+  "successRate": "95.60%",
+  "totalTimeSec": "11.05",
+  "requestsPerSecond": "45.2",
+  "latencyMs": {
+    "min": 92,
+    "p50": 334,
+    "mean": "295.6",
+    "p90": 440,
+    "p95": 557,
+    "p99": 880,
+    "max": 1780
+  },
+  "statusCodes": {
+    "200": 478,
+    "403": 2,
+    "404": 20
+  },
+  "endpointSummaries": {
+    "Storefront: Product Page": {
+      "total": 20,
+      "success": 0,
+      "successRate": "0.0%",
+      "avgLatencyMs": "113.3",
+      "p95Ms": 359
+    },
+    "Storefront: Cart Page": {
+      "total": 20,
+      "success": 20,
+      "successRate": "100.0%",
+      "avgLatencyMs": "125.0",
+      "p95Ms": 372
+    },
+    "Storefront: Home Page": {
+      "total": 60,
+      "success": 60,
+      "successRate": "100.0%",
+      "avgLatencyMs": "113.6",
+      "p95Ms": 341
+    },
+    "API Write: /api/teams (Register)": {
+      "total": 50,
+      "success": 50,
+      "successRate": "100.0%",
+      "avgLatencyMs": "479.7",
+      "p95Ms": 847
+    },
+    "API Read: /api/admin/portal-status": {
+      "total": 20,
+      "success": 20,
+      "successRate": "100.0%",
+      "avgLatencyMs": "365.8",
+      "p95Ms": 1115
+    },
+    "API Write: /api/submissions (Bug Submit)": {
+      "total": 150,
+      "success": 148,
+      "successRate": "98.7%",
+      "avgLatencyMs": "364.4",
+      "p95Ms": 512
+    },
+    "API Read: /api/treasures": {
+      "total": 20,
+      "success": 20,
+      "successRate": "100.0%",
+      "avgLatencyMs": "380.9",
+      "p95Ms": 893
+    },
+    "Portal UI: Home Portal": {
+      "total": 15,
+      "success": 15,
+      "successRate": "100.0%",
+      "avgLatencyMs": "399.1",
+      "p95Ms": 670
+    },
+    "Portal UI: Leaderboard Page": {
+      "total": 35,
+      "success": 35,
+      "successRate": "100.0%",
+      "avgLatencyMs": "107.9",
+      "p95Ms": 128
+    },
+    "API Read: /api/leaderboard": {
+      "total": 35,
+      "success": 35,
+      "successRate": "100.0%",
+      "avgLatencyMs": "426.2",
+      "p95Ms": 687
+    },
+    "Portal UI: Submit Page": {
+      "total": 35,
+      "success": 35,
+      "successRate": "100.0%",
+      "avgLatencyMs": "196.3",
+      "p95Ms": 880
+    },
+    "Portal UI: Treasures Page": {
+      "total": 15,
+      "success": 15,
+      "successRate": "100.0%",
+      "avgLatencyMs": "150.3",
+      "p95Ms": 559
+    },
+    "API Read: /api/teams": {
+      "total": 25,
+      "success": 25,
+      "successRate": "100.0%",
+      "avgLatencyMs": "353.7",
+      "p95Ms": 394
+    }
+  }
+}
