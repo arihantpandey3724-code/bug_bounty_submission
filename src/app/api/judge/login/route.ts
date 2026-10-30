@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { JUDGE_PIN, getExpectedJudgeToken } from "@/lib/judgeAuth";
+import { isPinValid, getExpectedJudgeToken } from "@/lib/judgeAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { pin } = body;
 
-    if (pin && typeof pin === "string" && pin.trim() === JUDGE_PIN.trim()) {
+    if (isPinValid(pin)) {
       const response = NextResponse.json({
         success: true,
         message: "Judge authentication granted.",

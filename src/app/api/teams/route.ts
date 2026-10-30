@@ -15,13 +15,45 @@ export async function GET(req: NextRequest) {
     if (isDbActiveSync()) {
       try {
         if (id) {
-          const team = await prisma.team.findUnique({
+          let team = await prisma.team.findUnique({
             where: { id },
             include: {
               submissions: { orderBy: { createdAt: "desc" } },
               claimedTreasures: true,
             },
           });
+
+          // Self-heal: If team exists in localStore but not in PostgreSQL yet, synchronize to DB
+          if (!team) {
+            const localTeam = localStore.findTeamById(id);
+            if (localTeam) {
+              try {
+                team = await prisma.team.create({
+                  data: {
+                    id: localTeam.id,
+                    name: localTeam.name,
+                    email: localTeam.email,
+                    totalScore: localTeam.totalScore || 0,
+                    validBugsCount: localTeam.validBugsCount || 0,
+                    hasMilestoneBonus: localTeam.hasMilestoneBonus || false,
+                  },
+                  include: {
+                    submissions: { orderBy: { createdAt: "desc" } },
+                    claimedTreasures: true,
+                  },
+                });
+              } catch {
+                team = await prisma.team.findFirst({
+                  where: { name: localTeam.name },
+                  include: {
+                    submissions: { orderBy: { createdAt: "desc" } },
+                    claimedTreasures: true,
+                  },
+                });
+              }
+            }
+          }
+
           return NextResponse.json({ team });
         }
 

@@ -192,13 +192,41 @@ export async function POST(req: NextRequest) {
     // 4. Persist to PostgreSQL only if DB is reachable
     if (isDbActiveSync()) {
       try {
-        const dbTeam = await prisma.team.findUnique({ where: { id: teamId } });
+        let dbTeam = await prisma.team.findUnique({ where: { id: teamId } });
+
+        if (!dbTeam) {
+          // Self-heal: Ensure team exists in PostgreSQL so foreign key constraint never fails
+          const localTeam = localStore.findTeamById(teamId);
+          const candidateName = localTeam?.name || (body.teamName as string) || `Team_${teamId.slice(-6)}`;
+          const candidateEmail = localTeam?.email || `${candidateName.toLowerCase().replace(/[^a-z0-9]/g, "_")}@entropy-bounty.io`;
+
+          try {
+            dbTeam = await prisma.team.upsert({
+              where: { name: candidateName },
+              update: {},
+              create: {
+                id: teamId,
+                name: candidateName,
+                email: candidateEmail,
+                totalScore: 0,
+                validBugsCount: 0,
+                hasMilestoneBonus: false,
+              },
+            });
+          } catch {
+            dbTeam = await prisma.team.findFirst({
+              where: { name: candidateName },
+            });
+          }
+        }
 
         if (dbTeam) {
+          const effectiveTeamId = dbTeam.id;
+
           if (isAutoVerified && aiResult.matchedBugId) {
             const alreadyVerified = await prisma.regularSubmission.findFirst({
               where: {
-                teamId,
+                teamId: effectiveTeamId,
                 matchedBugId: aiResult.matchedBugId,
                 status: "VERIFIED",
                 awardedPoints: { gt: 0 },
@@ -219,7 +247,7 @@ export async function POST(req: NextRequest) {
                   isSpeedBonus = true;
                   await prisma.masterBug.update({
                     where: { id: aiResult.matchedBugId },
-                    data: { isFirstFound: true, firstFoundById: teamId },
+                    data: { isFirstFound: true, firstFoundById: effectiveTeamId },
                   });
                 }
                 awardedPoints = calculateRegularPoints(bug.category, isSpeedBonus);
@@ -228,21 +256,21 @@ export async function POST(req: NextRequest) {
               }
 
               await prisma.team.update({
-                where: { id: teamId },
+                where: { id: effectiveTeamId },
                 data: {
                   totalScore: { increment: awardedPoints },
                   validBugsCount: { increment: 1 },
                 },
               });
 
-              await evaluateMilestoneBonus(teamId);
+              await evaluateMilestoneBonus(effectiveTeamId);
             }
           }
 
           await prisma.regularSubmission.create({
             data: {
               id: submissionId,
-              teamId,
+              teamId: effectiveTeamId,
               description: initialRecord.description,
               codeSnippet: initialRecord.codeSnippet || null,
               screenshotUrl: initialRecord.screenshotUrl || null,
@@ -257,7 +285,7 @@ export async function POST(req: NextRequest) {
 
           return NextResponse.json({
             success: true,
-            submission: { id: submissionId, teamId, status: targetStatus, createdAt: initialRecord.createdAt },
+            submission: { id: submissionId, teamId: effectiveTeamId, status: targetStatus, createdAt: initialRecord.createdAt },
             message: isAutoVerified
               ? "Report verified and points awarded!"
               : "Report received and queued for review.",
