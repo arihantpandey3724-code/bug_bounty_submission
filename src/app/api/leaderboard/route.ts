@@ -1,35 +1,81 @@
 import { NextResponse } from "next/server";
+import { sql } from "@/lib/neonClient";
 import prisma from "@/lib/prisma";
-import localStore from "@/lib/localStore";
-import { isDbActiveSync, markDbOffline } from "@/lib/dbCircuitBreaker";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET() {
-  // === DB PATH (fast-skip if circuit breaker is open) ===
-  if (isDbActiveSync()) {
+  const headers = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+    Pragma: "no-cache",
+    Expires: "0",
+  };
+
+  try {
+    // 1. Primary High-Performance Serverless Neon Path (HTTPS, zero connection pool timeouts)
+    const teams = await sql`
+      SELECT 
+        t.id, 
+        t.name, 
+        t.email, 
+        t."totalScore", 
+        t."validBugsCount", 
+        t."hasMilestoneBonus", 
+        t."createdAt",
+        coalesce(count(distinct case when s.status = 'VERIFIED' and s."isSpeedBonus" = true then s.id end), 0)::int as "speedBonusCount",
+        coalesce(count(distinct tr.id), 0)::int as "treasuresClaimedCount",
+        coalesce(count(distinct case when s.status = 'VERIFIED' then s.id end), 0)::int as "verifiedSubmissionsCount"
+      FROM "Team" t
+      LEFT JOIN "RegularSubmission" s ON s."teamId" = t.id
+      LEFT JOIN "TreasureBug" tr ON tr."claimedByTeamId" = t.id
+      GROUP BY t.id, t.name, t.email, t."totalScore", t."validBugsCount", t."hasMilestoneBonus", t."createdAt"
+      ORDER BY t."totalScore" DESC, t."validBugsCount" DESC, t."createdAt" ASC;
+    `;
+
+    const milestones = await sql`
+      SELECT "awardedToTeamId", "awardedAt" FROM "MilestoneTracker" WHERE id = 1 LIMIT 1;
+    `;
+    const milestone = milestones[0] || null;
+
+    const leaderboard = teams.map((team: any, index: number) => ({
+      rank: index + 1,
+      id: team.id,
+      name: team.name,
+      email: team.email,
+      totalScore: team.totalScore,
+      validBugsCount: team.validBugsCount,
+      hasMilestoneBonus: team.hasMilestoneBonus,
+      speedBonusCount: team.speedBonusCount,
+      treasuresClaimedCount: team.treasuresClaimedCount,
+      verifiedSubmissionsCount: team.verifiedSubmissionsCount,
+    }));
+
+    return NextResponse.json(
+      {
+        leaderboard,
+        milestoneBonusClaimedBy: milestone?.awardedToTeamId || null,
+        milestoneBonusClaimedAt: milestone?.awardedAt || null,
+        updatedAt: new Date().toISOString(),
+      },
+      { headers }
+    );
+  } catch (neonErr: any) {
+    console.error("[api/leaderboard] Neon HTTP error, attempting Prisma fallback:", neonErr.message);
+
     try {
       const teams = await prisma.team.findMany({
         orderBy: [{ totalScore: "desc" }, { validBugsCount: "desc" }, { createdAt: "asc" }],
         include: {
-          claimedTreasures: {
-            select: { id: true, claimedAt: true },
-          },
+          claimedTreasures: { select: { id: true, claimedAt: true } },
           submissions: {
             where: { status: "VERIFIED" },
-            select: {
-              id: true,
-              isSpeedBonus: true,
-              awardedPoints: true,
-              matchedBugId: true,
-            },
+            select: { id: true, isSpeedBonus: true, awardedPoints: true, matchedBugId: true },
           },
         },
       });
 
-      const milestone = await prisma.milestoneTracker.findUnique({
-        where: { id: 1 },
-      });
+      const milestone = await prisma.milestoneTracker.findUnique({ where: { id: 1 } });
 
       const leaderboard = teams.map((team, index) => {
         const speedBonusCount = team.submissions.filter((s) => s.isSpeedBonus).length;
@@ -54,58 +100,14 @@ export async function GET() {
           milestoneBonusClaimedAt: milestone?.awardedAt || null,
           updatedAt: new Date().toISOString(),
         },
-        {
-          headers: {
-            "Cache-Control": "public, s-maxage=3, stale-while-revalidate=5",
-          },
-        }
+        { headers }
       );
-    } catch (err: any) {
-      markDbOffline();
-      console.warn("[api/leaderboard] DB offline, switching to localStore:", err.message);
+    } catch (fallbackErr: any) {
+      console.error("[api/leaderboard] Fatal DB error:", fallbackErr.message);
+      return NextResponse.json(
+        { error: "Database temporarily busy. Please refresh.", retryable: true },
+        { status: 503, headers }
+      );
     }
   }
-
-  // === LOCAL STORE FALLBACK ===
-  const sortedTeams = [...localStore.getTeams()].sort((a, b) => {
-    if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-    if (b.validBugsCount !== a.validBugsCount) return b.validBugsCount - a.validBugsCount;
-    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-  });
-
-  const submissions = localStore.getSubmissions({ status: "VERIFIED" });
-  const treasures = localStore.getTreasures().filter((t) => t.isClaimed);
-
-  const leaderboard = sortedTeams.map((t, index) => {
-    const teamSubs = submissions.filter((s) => s.teamId === t.id);
-    const teamTreasures = treasures.filter((tr) => tr.claimedByTeamId === t.id);
-    const speedBonusCount = teamSubs.filter((s) => s.isSpeedBonus).length;
-
-    return {
-      rank: index + 1,
-      id: t.id,
-      name: t.name,
-      email: t.email,
-      totalScore: t.totalScore,
-      validBugsCount: t.validBugsCount,
-      hasMilestoneBonus: t.hasMilestoneBonus,
-      speedBonusCount,
-      treasuresClaimedCount: teamTreasures.length,
-      verifiedSubmissionsCount: teamSubs.length,
-    };
-  });
-
-  return NextResponse.json(
-    {
-      leaderboard,
-      milestoneBonusClaimedBy: localStore.milestoneAwardedTo,
-      milestoneBonusClaimedAt: localStore.milestoneAwardedAt,
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      headers: {
-        "Cache-Control": "public, s-maxage=3, stale-while-revalidate=5",
-      },
-    }
-  );
 }

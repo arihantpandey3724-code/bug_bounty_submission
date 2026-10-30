@@ -8,10 +8,17 @@ export const dynamic = "force-dynamic";
  * Public GET: check if submission portal is currently accepting submissions.
  */
 export async function GET() {
-  return NextResponse.json({
-    submissionsOpen: localStore.isSubmissionsOpen(),
-    updatedAt: localStore.submissionsStatusUpdatedAt,
-  });
+  return NextResponse.json(
+    {
+      submissionsOpen: localStore.isSubmissionsOpen(),
+      updatedAt: localStore.submissionsStatusUpdatedAt,
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+      },
+    }
+  );
 }
 
 /**

@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sql } from "@/lib/neonClient";
 import prisma from "@/lib/prisma";
-import { evaluateMilestoneBonus } from "@/lib/scoring";
-import localStore from "@/lib/localStore";
-import { isDbActiveSync, markDbOffline } from "@/lib/dbCircuitBreaker";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +18,6 @@ export async function POST(req: NextRequest) {
 
     const cleanCode = code.trim();
 
-    // Check for AI Decoy Honeypot Flag
     if (cleanCode === "FLAG{inspect_more_closely_first_level_decoy}") {
       return NextResponse.json(
         {
@@ -30,98 +27,144 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // === DB PATH (fast-skip if circuit breaker is open) ===
-    if (isDbActiveSync()) {
-      try {
-        const treasure = await prisma.treasureBug.findUnique({
-          where: { code: cleanCode },
-          include: { claimedByTeam: true },
-        });
+    try {
+      // 1. Atomic Compare-And-Swap (CAS) Claim on Neon PostgreSQL
+      const claimed = await sql`
+        UPDATE "TreasureBug"
+        SET "isClaimed" = true, "claimedByTeamId" = ${teamId}, "claimedAt" = NOW()
+        WHERE code = ${cleanCode} AND "isClaimed" = false
+        RETURNING id, code, "claimedAt";
+      `;
 
-        if (!treasure) {
-          return NextResponse.json(
-            { error: "Invalid flag code. No matching treasure bug found." },
-            { status: 404 }
-          );
-        }
+      if (claimed.length > 0) {
+        const treasure = claimed[0];
 
-        if (treasure.isClaimed) {
-          return NextResponse.json(
-            {
-              error: `Treasure Bug #${treasure.id} has already been claimed by ${
-                treasure.claimedByTeam?.name || "another team"
-              }!`,
-            },
-            { status: 409 }
-          );
-        }
+        // Increment team score by 10 points
+        await sql`
+          UPDATE "Team"
+          SET "totalScore" = "totalScore" + 10, "validBugsCount" = "validBugsCount" + 1
+          WHERE id = ${teamId};
+        `;
 
-        try {
-          await prisma.$transaction(async (tx) => {
-            const updateResult = await tx.treasureBug.updateMany({
-              where: { id: treasure.id, isClaimed: false },
-              data: {
-                isClaimed: true,
-                claimedByTeamId: teamId,
-                claimedAt: new Date(),
-              },
-            });
-
-            if (updateResult.count === 0) {
-              throw new Error("ALREADY_CLAIMED");
-            }
-
-            await tx.team.update({
-              where: { id: teamId },
-              data: {
-                totalScore: { increment: 10 },
-                validBugsCount: { increment: 1 },
-              },
-            });
-          });
-        } catch (claimErr: any) {
-          if (claimErr.message === "ALREADY_CLAIMED") {
-            return NextResponse.json(
-              { error: `Treasure Bug #${treasure.id} was just claimed by another team!` },
-              { status: 409 }
-            );
+        // Check 10-bug milestone bonus
+        const milestoneCheck = await sql`
+          SELECT "validBugsCount" FROM "Team" WHERE id = ${teamId};
+        `;
+        if (milestoneCheck[0]?.validBugsCount >= 10) {
+          const milestoneClaim = await sql`
+            UPDATE "MilestoneTracker"
+            SET "awardedToTeamId" = ${teamId}, "awardedAt" = NOW()
+            WHERE id = 1 AND "awardedToTeamId" IS NULL
+            RETURNING id;
+          `;
+          if (milestoneClaim.length > 0) {
+            await sql`
+              UPDATE "Team"
+              SET "totalScore" = "totalScore" + 10, "hasMilestoneBonus" = true
+              WHERE id = ${teamId};
+            `;
           }
-          throw claimErr;
         }
-
-        await evaluateMilestoneBonus(teamId);
-
-        const updatedTeam = await prisma.team.findUnique({ where: { id: teamId } });
 
         return NextResponse.json({
           success: true,
           treasureId: treasure.id,
           pointsAwarded: 10,
-          newTotalScore: updatedTeam?.totalScore,
-          message: `🎉 Treasure Bug #${treasure.id} claimed! +10 Points awarded to your team!`,
+          message: `🎉 CONGRATULATIONS! You successfully claimed Treasure Bug #${treasure.id}! +10 points awarded to your team!`,
         });
-      } catch (dbErr: any) {
-        markDbOffline();
-        console.warn("[api/treasures/claim] DB offline, switching to localStore:", dbErr.message);
       }
-    }
 
-    // === LOCAL STORE FALLBACK ===
-    const res = localStore.claimTreasure(teamId, cleanCode);
-    if (res.error) {
-      return NextResponse.json({ error: res.error }, { status: 400 });
-    }
+      // If update returned 0 rows, check if it's already claimed or invalid
+      const checkExisting = await sql`
+        SELECT tr.id, tr."isClaimed", tr."claimedByTeamId", t.name as "claimedByName"
+        FROM "TreasureBug" tr
+        LEFT JOIN "Team" t ON t.id = tr."claimedByTeamId"
+        WHERE tr.code = ${cleanCode}
+        LIMIT 1;
+      `;
 
-    return NextResponse.json({
-      success: true,
-      treasureId: res.treasureId,
-      pointsAwarded: 10,
-      newTotalScore: res.newScore,
-      message: `🎉 Treasure Bug #${res.treasureId} claimed! +10 Points awarded to your team!`,
-    });
+      if (checkExisting.length === 0) {
+        return NextResponse.json(
+          { error: "Invalid flag code. No matching treasure bug found." },
+          { status: 404 }
+        );
+      }
+
+      const existing = checkExisting[0];
+      if (existing.isClaimed) {
+        return NextResponse.json(
+          {
+            error: `Treasure Bug #${existing.id} has already been claimed by ${
+              existing.claimedByName || "another team"
+            }!`,
+          },
+          { status: 409 }
+        );
+      }
+
+      return NextResponse.json(
+        { error: "Could not claim treasure at this time. Please retry." },
+        { status: 409 }
+      );
+    } catch (neonErr: any) {
+      console.warn("[api/treasures/claim] Neon HTTP fallback to Prisma:", neonErr.message);
+
+      const treasure = await prisma.treasureBug.findUnique({
+        where: { code: cleanCode },
+        include: { claimedByTeam: true },
+      });
+
+      if (!treasure) {
+        return NextResponse.json(
+          { error: "Invalid flag code. No matching treasure bug found." },
+          { status: 404 }
+        );
+      }
+
+      if (treasure.isClaimed) {
+        return NextResponse.json(
+          {
+            error: `Treasure Bug #${treasure.id} has already been claimed by ${
+              treasure.claimedByTeam?.name || "another team"
+            }!`,
+          },
+          { status: 409 }
+        );
+      }
+
+      await prisma.$transaction(async (tx) => {
+        const updateResult = await tx.treasureBug.updateMany({
+          where: { id: treasure.id, isClaimed: false },
+          data: {
+            isClaimed: true,
+            claimedByTeamId: teamId,
+            claimedAt: new Date(),
+          },
+        });
+
+        if (updateResult.count === 0) {
+          throw new Error("ALREADY_CLAIMED");
+        }
+
+        await tx.team.update({
+          where: { id: teamId },
+          data: {
+            totalScore: { increment: 10 },
+            validBugsCount: { increment: 1 },
+          },
+        });
+      });
+
+      return NextResponse.json({
+        success: true,
+        treasureId: treasure.id,
+        pointsAwarded: 10,
+        message: `🎉 CONGRATULATIONS! You successfully claimed Treasure Bug #${treasure.id}! +10 points awarded to your team!`,
+      });
+    }
   } catch (err: any) {
     return NextResponse.json(
-      { error: "Failed to claim treasure bug", details: err.message },
+      { error: "Failed to process treasure claim", details: err.message },
       { status: 500 }
     );
   }

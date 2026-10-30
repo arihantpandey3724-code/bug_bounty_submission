@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sql } from "@/lib/neonClient";
 import prisma from "@/lib/prisma";
 import { evaluateSubmissionWithAI } from "@/lib/gemini";
 import { appendToDiskBackup } from "@/lib/submissionStore";
 import localStore from "@/lib/localStore";
 import { isJudgeAuthorized } from "@/lib/judgeAuth";
 import { calculateRegularPoints, evaluateMilestoneBonus } from "@/lib/scoring";
-import { MASTER_BUGS } from "@/config/masterBugs";
-import { isDbActiveSync, markDbOffline } from "@/lib/dbCircuitBreaker";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +18,6 @@ export async function GET(req: NextRequest) {
 
     const isJudge = isJudgeAuthorized(req);
 
-    // Only allow global querying across all teams if authenticated as Judge
     if (!teamId && !isJudge) {
       return NextResponse.json(
         { error: "Unauthorized: teamId parameter or Judge authentication is required." },
@@ -27,87 +25,56 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // === DB PATH (fast-skip if circuit breaker is open) ===
-    if (isDbActiveSync()) {
-      try {
-        const where: any = {};
-        if (teamId) where.teamId = teamId;
-        if (status && status !== "ALL") where.status = status;
-        if (bugId) where.matchedBugId = bugId;
-
-        const rawSubmissions = await prisma.regularSubmission.findMany({
-          where,
-          orderBy: { createdAt: "desc" },
-          include: {
-            team: {
-              select: { id: true, name: true, email: true },
-            },
-            matchedBug: true,
-          },
-        });
-
-        if (isJudge) {
-          return NextResponse.json({ submissions: rawSubmissions });
-        }
-
-        const sanitized = rawSubmissions.map((sub) => ({
-          id: sub.id,
-          teamId: sub.teamId,
-          team: sub.team,
-          description: sub.description,
-          codeSnippet: sub.codeSnippet,
-          screenshotUrl: sub.screenshotUrl,
-          status: sub.status,
-          awardedPoints: sub.awardedPoints,
-          isSpeedBonus: sub.isSpeedBonus,
-          createdAt: sub.createdAt,
-          matchedBug:
-            sub.status === "VERIFIED" && sub.matchedBug
-              ? {
-                  title: sub.matchedBug.title,
-                  category: sub.matchedBug.category,
-                }
-              : null,
-        }));
-
-        return NextResponse.json({ submissions: sanitized });
-      } catch (dbErr: any) {
-        markDbOffline();
-        console.warn("[api/submissions GET] DB offline, switching to localStore:", dbErr.message);
+    try {
+      if (teamId) {
+        const rawSubmissions = await sql`
+          SELECT s.id, s."teamId", s.description, s."codeSnippet", s."screenshotUrl",
+                 s.status, s."awardedPoints", s."isSpeedBonus", s."matchedBugId", s."createdAt",
+                 json_build_object('id', t.id, 'name', t.name, 'email', t.email) as team,
+                 case when b.id is not null then json_build_object('title', b.title, 'category', b.category) else null end as "matchedBug"
+          FROM "RegularSubmission" s
+          JOIN "Team" t ON t.id = s."teamId"
+          LEFT JOIN "MasterBug" b ON b.id = s."matchedBugId"
+          WHERE s."teamId" = ${teamId}
+          ORDER BY s."createdAt" DESC;
+        `;
+        return NextResponse.json({ submissions: rawSubmissions });
       }
-    }
 
-    // === LOCAL STORE FALLBACK ===
-    const rawSubmissions = localStore.getSubmissions({
-      teamId: teamId || undefined,
-      status: status || undefined,
-    });
+      if (isJudge) {
+        const rawSubmissions = await sql`
+          SELECT s.id, s."teamId", s.description, s."codeSnippet", s."screenshotUrl",
+                 s.status, s."awardedPoints", s."isSpeedBonus", s."matchedBugId", s."createdAt",
+                 json_build_object('id', t.id, 'name', t.name, 'email', t.email) as team,
+                 case when b.id is not null then json_build_object('title', b.title, 'category', b.category) else null end as "matchedBug"
+          FROM "RegularSubmission" s
+          JOIN "Team" t ON t.id = s."teamId"
+          LEFT JOIN "MasterBug" b ON b.id = s."matchedBugId"
+          ORDER BY s."createdAt" DESC;
+        `;
+        return NextResponse.json({ submissions: rawSubmissions });
+      }
 
-    if (isJudge) {
+      return NextResponse.json({ submissions: [] });
+    } catch (neonErr: any) {
+      console.warn("[api/submissions GET] Neon HTTP fallback to Prisma:", neonErr.message);
+
+      const where: any = {};
+      if (teamId) where.teamId = teamId;
+      if (status && status !== "ALL") where.status = status;
+      if (bugId) where.matchedBugId = bugId;
+
+      const rawSubmissions = await prisma.regularSubmission.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        include: {
+          team: { select: { id: true, name: true, email: true } },
+          matchedBug: true,
+        },
+      });
+
       return NextResponse.json({ submissions: rawSubmissions });
     }
-
-    const sanitized = rawSubmissions.map((sub: any) => ({
-      id: sub.id,
-      teamId: sub.teamId,
-      team: sub.team,
-      description: sub.description,
-      codeSnippet: sub.codeSnippet,
-      screenshotUrl: sub.screenshotUrl,
-      status: sub.status,
-      awardedPoints: sub.awardedPoints,
-      isSpeedBonus: sub.isSpeedBonus,
-      createdAt: sub.createdAt,
-      matchedBug:
-        sub.status === "VERIFIED" && sub.matchedBug
-          ? {
-              title: sub.matchedBug.title,
-              category: sub.matchedBug.category,
-            }
-          : null,
-    }));
-
-    return NextResponse.json({ submissions: sanitized });
   } catch (err: any) {
     return NextResponse.json(
       { error: "Failed to fetch submissions", details: err.message },
@@ -140,9 +107,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. GUARANTEED PERSISTENCE STEP:
-    // Generate deterministic ID and append to local disk backup IMMEDIATELY.
-    // This happens synchronously before any DB or AI calls so no report is EVER lost.
     const submissionId = `sub-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const team = localStore.findTeamById(teamId);
 
@@ -161,7 +125,7 @@ export async function POST(req: NextRequest) {
 
     appendToDiskBackup(initialRecord);
 
-    // 2. Run AI Evaluation
+    // Run AI / Heuristic Evaluation
     let aiResult = {
       matchedBugId: null as string | null,
       confidence: 0,
@@ -179,7 +143,6 @@ export async function POST(req: NextRequest) {
       console.warn("[api/submissions] AI evaluation error:", evalErr);
     }
 
-    // 3. Auto-Verification Threshold: If AI confidence is >= 80% (0.80) and matched a bug
     const isAutoVerified =
       Boolean(aiResult.matchedBugId) &&
       typeof aiResult.confidence === "number" &&
@@ -189,220 +152,202 @@ export async function POST(req: NextRequest) {
     let awardedPoints = 0;
     let isSpeedBonus = false;
 
-    // 4. Persist to PostgreSQL only if DB is reachable
-    if (isDbActiveSync()) {
-      try {
-        if (!isAutoVerified) {
-          // ULTRA-FAST PATH: 1 single direct insert for queued/triage reports
-          try {
-            await prisma.regularSubmission.create({
-              data: {
-                id: submissionId,
-                teamId,
-                description: initialRecord.description,
-                codeSnippet: initialRecord.codeSnippet || null,
-                screenshotUrl: initialRecord.screenshotUrl || null,
-                status: targetStatus,
-                matchedBugId: aiResult.matchedBugId,
-                llmConfidence: aiResult.confidence,
-                llmReasoning: aiResult.reasoning,
-                awardedPoints: 0,
-                isSpeedBonus: false,
-              },
-            });
+    // PRIMARY PATH: Direct HTTPS Execution on Neon Cloud PostgreSQL
+    try {
+      // 1. Ensure team exists in Neon PostgreSQL so foreign key never fails
+      let dbTeams = await sql`
+        SELECT id, name, "totalScore", "validBugsCount" 
+        FROM "Team" 
+        WHERE id = ${teamId} LIMIT 1;
+      `;
 
-            return NextResponse.json({
-              success: true,
-              submission: { id: submissionId, teamId, status: targetStatus, createdAt: initialRecord.createdAt },
-              message: "Report received and queued for review.",
-            });
-          } catch (insertErr: any) {
-            // Self-heal team only if foreign key constraint indicates missing team (rare 1% case)
-            if (insertErr.code === "P2003" || insertErr.message?.includes("Foreign key")) {
-              const localTeam = localStore.findTeamById(teamId);
-              const candidateName = localTeam?.name || (body.teamName as string) || `Team_${teamId.slice(-6)}`;
-              const candidateEmail = localTeam?.email || `${candidateName.toLowerCase().replace(/[^a-z0-9]/g, "_")}@entropy-bounty.io`;
+      if (dbTeams.length === 0) {
+        const candidateName = (body.teamName as string) || `Team_${teamId.slice(-6)}`;
+        const candidateEmail = `${candidateName.toLowerCase().replace(/[^a-z0-9]/g, "_")}@entropy-bounty.io`;
+        dbTeams = await sql`
+          INSERT INTO "Team" ("id", "name", "email", "totalScore", "validBugsCount", "hasMilestoneBonus", "createdAt")
+          VALUES (${teamId}, ${candidateName}, ${candidateEmail}, 0, 0, false, NOW())
+          ON CONFLICT ("name") DO UPDATE SET "name" = EXCLUDED."name"
+          RETURNING id, name, "totalScore", "validBugsCount";
+        `;
+      }
 
-              await prisma.team.upsert({
-                where: { name: candidateName },
-                update: {},
-                create: {
-                  id: teamId,
-                  name: candidateName,
-                  email: candidateEmail,
-                  totalScore: 0,
-                  validBugsCount: 0,
-                  hasMilestoneBonus: false,
-                },
-              });
+      const effectiveTeam = dbTeams[0];
+      const effectiveTeamId = effectiveTeam.id;
 
-              await prisma.regularSubmission.create({
-                data: {
-                  id: submissionId,
-                  teamId,
-                  description: initialRecord.description,
-                  codeSnippet: initialRecord.codeSnippet || null,
-                  screenshotUrl: initialRecord.screenshotUrl || null,
-                  status: targetStatus,
-                  matchedBugId: aiResult.matchedBugId,
-                  llmConfidence: aiResult.confidence,
-                  llmReasoning: aiResult.reasoning,
-                  awardedPoints: 0,
-                  isSpeedBonus: false,
-                },
-              });
+      // 2. Handle verification scoring & speed bonus
+      if (isAutoVerified && aiResult.matchedBugId) {
+        const duplicates = await sql`
+          SELECT id FROM "RegularSubmission"
+          WHERE "teamId" = ${effectiveTeamId} AND "matchedBugId" = ${aiResult.matchedBugId}
+            AND status = 'VERIFIED' AND "awardedPoints" > 0
+          LIMIT 1;
+        `;
 
-              return NextResponse.json({
-                success: true,
-                submission: { id: submissionId, teamId, status: targetStatus, createdAt: initialRecord.createdAt },
-                message: "Report received and queued for review.",
-              });
-            }
-            throw insertErr;
+        if (duplicates.length > 0) {
+          awardedPoints = 0;
+          isSpeedBonus = false;
+          aiResult.reasoning = `[DUPLICATE] Team has already been credited points for Bug ${aiResult.matchedBugId}. Duplicate submissions for the same defect do not award additional score.`;
+        } else {
+          // Atomic First-Finder Speed Bonus Assignment
+          const speedBonusUpdate = await sql`
+            UPDATE "MasterBug"
+            SET "isFirstFound" = true, "firstFoundById" = ${effectiveTeamId}
+            WHERE id = ${aiResult.matchedBugId} AND "isFirstFound" = false
+            RETURNING id, category, "basePoints", "speedBonusPoints";
+          `;
+
+          if (speedBonusUpdate.length > 0) {
+            isSpeedBonus = true;
+            awardedPoints = speedBonusUpdate[0].basePoints + speedBonusUpdate[0].speedBonusPoints;
+          } else {
+            isSpeedBonus = false;
+            const bugInfo = await sql`
+              SELECT category, "basePoints" FROM "MasterBug" WHERE id = ${aiResult.matchedBugId} LIMIT 1;
+            `;
+            awardedPoints = bugInfo.length > 0 ? bugInfo[0].basePoints : 3;
           }
-        }
 
-        // AUTO-VERIFIED PATH:
-        let dbTeam = await prisma.team.findUnique({ where: { id: teamId } });
+          // Increment team score
+          await sql`
+            UPDATE "Team"
+            SET "totalScore" = "totalScore" + ${awardedPoints},
+                "validBugsCount" = "validBugsCount" + 1
+            WHERE id = ${effectiveTeamId};
+          `;
 
-        if (!dbTeam) {
-          const localTeam = localStore.findTeamById(teamId);
-          const candidateName = localTeam?.name || (body.teamName as string) || `Team_${teamId.slice(-6)}`;
-          const candidateEmail = localTeam?.email || `${candidateName.toLowerCase().replace(/[^a-z0-9]/g, "_")}@entropy-bounty.io`;
-
-          try {
-            dbTeam = await prisma.team.upsert({
-              where: { name: candidateName },
-              update: {},
-              create: {
-                id: teamId,
-                name: candidateName,
-                email: candidateEmail,
-                totalScore: 0,
-                validBugsCount: 0,
-                hasMilestoneBonus: false,
-              },
-            });
-          } catch {
-            dbTeam = await prisma.team.findFirst({
-              where: { name: candidateName },
-            });
-          }
-        }
-
-        if (dbTeam) {
-          const effectiveTeamId = dbTeam.id;
-
-          if (isAutoVerified && aiResult.matchedBugId) {
-            const alreadyVerified = await prisma.regularSubmission.findFirst({
-              where: {
-                teamId: effectiveTeamId,
-                matchedBugId: aiResult.matchedBugId,
-                status: "VERIFIED",
-                awardedPoints: { gt: 0 },
-              },
-            });
-
-            if (alreadyVerified) {
-              awardedPoints = 0;
-              isSpeedBonus = false;
-              aiResult.reasoning = `[DUPLICATE] Team has already been credited points for Bug ${aiResult.matchedBugId}. Duplicate submissions for the same defect do not award additional score.`;
-            } else {
-              const bug = await prisma.masterBug.findUnique({
-                where: { id: aiResult.matchedBugId },
-              });
-
-              if (bug) {
-                if (!bug.isFirstFound) {
-                  isSpeedBonus = true;
-                  await prisma.masterBug.update({
-                    where: { id: aiResult.matchedBugId },
-                    data: { isFirstFound: true, firstFoundById: effectiveTeamId },
-                  });
-                }
-                awardedPoints = calculateRegularPoints(bug.category, isSpeedBonus);
-              } else {
-                awardedPoints = 3;
-              }
-
-              await prisma.team.update({
-                where: { id: effectiveTeamId },
-                data: {
-                  totalScore: { increment: awardedPoints },
-                  validBugsCount: { increment: 1 },
-                },
-              });
-
-              await evaluateMilestoneBonus(effectiveTeamId);
+          // Check 10-bug milestone bonus
+          const milestoneCheck = await sql`
+            SELECT "validBugsCount" FROM "Team" WHERE id = ${effectiveTeamId};
+          `;
+          if (milestoneCheck[0]?.validBugsCount >= 10) {
+            const milestoneClaim = await sql`
+              UPDATE "MilestoneTracker"
+              SET "awardedToTeamId" = ${effectiveTeamId}, "awardedAt" = NOW()
+              WHERE id = 1 AND "awardedToTeamId" IS NULL
+              RETURNING id;
+            `;
+            if (milestoneClaim.length > 0) {
+              await sql`
+                UPDATE "Team"
+                SET "totalScore" = "totalScore" + 10, "hasMilestoneBonus" = true
+                WHERE id = ${effectiveTeamId};
+              `;
             }
           }
-
-          await prisma.regularSubmission.create({
-            data: {
-              id: submissionId,
-              teamId: effectiveTeamId,
-              description: initialRecord.description,
-              codeSnippet: initialRecord.codeSnippet || null,
-              screenshotUrl: initialRecord.screenshotUrl || null,
-              status: targetStatus,
-              matchedBugId: aiResult.matchedBugId,
-              llmConfidence: aiResult.confidence,
-              llmReasoning: aiResult.reasoning,
-              awardedPoints,
-              isSpeedBonus,
-            },
-          });
-
-          return NextResponse.json({
-            success: true,
-            submission: { id: submissionId, teamId: effectiveTeamId, status: targetStatus, createdAt: initialRecord.createdAt },
-            message: isAutoVerified
-              ? "Report verified and points awarded!"
-              : "Report received and queued for review.",
-          });
         }
-      } catch (dbErr: any) {
-        markDbOffline();
-        console.warn("[api/submissions POST] DB offline, serving via disk store:", dbErr.message);
       }
-    }
 
-    // 5. Fallback to Local Store with disk persistence
-    if (isAutoVerified && aiResult.matchedBugId) {
-      const bug = localStore.getBug(aiResult.matchedBugId);
-      if (bug) {
-        if (!bug.isFirstFound) {
-          isSpeedBonus = true;
+      // 3. Guaranteed insertion into PostgreSQL
+      await sql`
+        INSERT INTO "RegularSubmission" (
+          "id", "teamId", "description", "codeSnippet", "screenshotUrl",
+          "status", "matchedBugId", "llmConfidence", "llmReasoning",
+          "awardedPoints", "isSpeedBonus", "createdAt"
+        ) VALUES (
+          ${submissionId}, ${effectiveTeamId}, ${initialRecord.description},
+          ${initialRecord.codeSnippet || null}, ${initialRecord.screenshotUrl || null},
+          ${targetStatus}, ${aiResult.matchedBugId || null},
+          ${aiResult.confidence || 0}, ${aiResult.reasoning || null},
+          ${awardedPoints}, ${isSpeedBonus}, NOW()
+        );
+      `;
+
+      return NextResponse.json({
+        success: true,
+        submission: {
+          id: submissionId,
+          teamId: effectiveTeamId,
+          status: targetStatus,
+          awardedPoints,
+          isSpeedBonus,
+          createdAt: initialRecord.createdAt,
+        },
+        message: isAutoVerified
+          ? "Report verified and points awarded!"
+          : "Report received and queued for review.",
+      });
+    } catch (neonErr: any) {
+      console.warn("[api/submissions POST] Neon HTTP fallback to Prisma:", neonErr.message);
+
+      let dbTeam = await prisma.team.findUnique({ where: { id: teamId } });
+      if (!dbTeam) {
+        const candidateName = (body.teamName as string) || `Team_${teamId.slice(-6)}`;
+        const candidateEmail = `${candidateName.toLowerCase().replace(/[^a-z0-9]/g, "_")}@entropy-bounty.io`;
+        dbTeam = await prisma.team.create({
+          data: {
+            id: teamId,
+            name: candidateName,
+            email: candidateEmail,
+            totalScore: 0,
+            validBugsCount: 0,
+            hasMilestoneBonus: false,
+          },
+        });
+      }
+
+      const effectiveTeamId = dbTeam.id;
+
+      if (isAutoVerified && aiResult.matchedBugId) {
+        const bug = await prisma.masterBug.findUnique({ where: { id: aiResult.matchedBugId } });
+        if (bug) {
+          if (!bug.isFirstFound) {
+            isSpeedBonus = true;
+            await prisma.masterBug.update({
+              where: { id: aiResult.matchedBugId },
+              data: { isFirstFound: true, firstFoundById: effectiveTeamId },
+            });
+          }
+          awardedPoints = calculateRegularPoints(bug.category, isSpeedBonus);
+        } else {
+          awardedPoints = 3;
         }
-        awardedPoints = bug.basePoints + (isSpeedBonus ? bug.speedBonusPoints : 0);
-      } else {
-        awardedPoints = 3;
+
+        await prisma.team.update({
+          where: { id: effectiveTeamId },
+          data: {
+            totalScore: { increment: awardedPoints },
+            validBugsCount: { increment: 1 },
+          },
+        });
+
+        await evaluateMilestoneBonus(effectiveTeamId);
       }
+
+      await prisma.regularSubmission.create({
+        data: {
+          id: submissionId,
+          teamId: effectiveTeamId,
+          description: initialRecord.description,
+          codeSnippet: initialRecord.codeSnippet || null,
+          screenshotUrl: initialRecord.screenshotUrl || null,
+          status: targetStatus,
+          matchedBugId: aiResult.matchedBugId,
+          llmConfidence: aiResult.confidence,
+          llmReasoning: aiResult.reasoning,
+          awardedPoints,
+          isSpeedBonus,
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        submission: {
+          id: submissionId,
+          teamId: effectiveTeamId,
+          status: targetStatus,
+          awardedPoints,
+          isSpeedBonus,
+          createdAt: initialRecord.createdAt,
+        },
+        message: isAutoVerified
+          ? "Report verified and points awarded!"
+          : "Report received and queued for review.",
+      });
     }
-
-    localStore.createSubmission({
-      teamId,
-      description: initialRecord.description,
-      codeSnippet: initialRecord.codeSnippet,
-      screenshotUrl: initialRecord.screenshotUrl,
-      matchedBugId: aiResult.matchedBugId,
-      llmConfidence: aiResult.confidence,
-      llmReasoning: aiResult.reasoning,
-      status: targetStatus,
-      awardedPoints,
-      isSpeedBonus,
-    });
-
-    return NextResponse.json({
-      success: true,
-      submission: { id: submissionId, teamId, status: targetStatus, createdAt: initialRecord.createdAt },
-      message: isAutoVerified
-        ? "Report verified and points awarded!"
-        : "Report received and queued for review.",
-    });
   } catch (err: any) {
     return NextResponse.json(
-      { error: "Failed to process submission", details: err.message },
+      { error: "Failed to submit bug report", details: err.message },
       { status: 500 }
     );
   }
