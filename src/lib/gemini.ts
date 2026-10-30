@@ -279,7 +279,7 @@ Respond ONLY with the JSON object. Do not include markdown code fence formatting
     try {
       response = await Promise.race([
         ai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: "gemini-3.8-flash",
           contents,
         }),
         timeoutPromise,
