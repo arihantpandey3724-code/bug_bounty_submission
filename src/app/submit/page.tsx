@@ -235,60 +235,39 @@ export default function SubmitBugPage() {
       {/* Submission Status Notification */}
       {submittedResult && (
         <div
-          className={`p-5 rounded-lg space-y-3 font-sans text-sm shadow-xs border ${
+          className={`p-4 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-sans text-sm shadow-xs border ${
             typeof submittedResult.id === "string" && submittedResult.id.startsWith("sub-")
-              ? "bg-emerald-50/50 border-emerald-300"
-              : "bg-amber-50/60 border-amber-300"
+              ? "bg-emerald-50 border-emerald-200 text-emerald-950"
+              : "bg-amber-50 border-amber-200 text-amber-950"
           }`}
         >
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-            <div className="space-y-1">
-              <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-3">
+            <span
+              className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                typeof submittedResult.id === "string" && submittedResult.id.startsWith("sub-")
+                  ? "bg-emerald-500"
+                  : "bg-amber-500"
+              }`}
+            />
+            <div>
+              <div className="font-semibold text-sm">
                 {typeof submittedResult.id === "string" && submittedResult.id.startsWith("sub-") ? (
-                  <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold">
-                    <Database className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>🟢 Confirmed Stored in Cloud Database</span>
-                  </span>
+                  <span>Stored in database</span>
                 ) : (
-                  <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-xs font-semibold">
-                    <HardDrive className="w-3.5 h-3.5 text-amber-700" />
-                    <span>🟡 Saved Locally on Device (Awaiting Network)</span>
-                  </span>
+                  <span>Stored locally. You may contact the admin.</span>
                 )}
               </div>
-              <h3 className="text-base font-semibold text-neutral-900">
-                {typeof submittedResult.id === "string" && submittedResult.id.startsWith("sub-")
-                  ? "Bug report submitted and stored in central database!"
-                  : "Bug report saved safely in your browser's local vault!"}
-              </h3>
-              <p className="text-sm text-neutral-600">
-                {typeof submittedResult.id === "string" && submittedResult.id.startsWith("sub-")
-                  ? "Your finding has been written directly to PostgreSQL. The scoring engine and judges have direct access to your submission."
-                  : "Your report is 100% saved on this computer. It will automatically sync to the database as soon as network is restored, or you can click sync in My Submissions."}
-              </p>
-            </div>
-            <Link
-              href="/my-submissions"
-              className="px-3.5 py-1.5 text-xs font-medium text-neutral-900 bg-white border border-neutral-300 hover:bg-neutral-100 rounded-md transition-colors flex-shrink-0 self-start shadow-xs"
-            >
-              View your submissions →
-            </Link>
-          </div>
-          <div className="pt-2.5 border-t border-neutral-200/80 flex flex-wrap items-center justify-between text-xs text-neutral-600 gap-2">
-            <div className="flex items-center space-x-1.5">
-              <Clock className="w-3.5 h-3.5 text-neutral-500" />
-              <span>Submitted at:</span>
-              <strong className="text-neutral-900 font-medium">
-                {new Date(submittedResult.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} ({new Date(submittedResult.createdAt || Date.now()).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })})
-              </strong>
-            </div>
-            <div className="flex items-center">
-              <span>{typeof submittedResult.id === "string" && submittedResult.id.startsWith("sub-") ? "Cloud DB ID:" : "Local Vault ID:"}</span>
-              <code className="ml-1.5 px-2 py-0.5 bg-neutral-100 text-neutral-800 rounded font-mono text-[11px] border border-neutral-200">
-                {submittedResult.id}
-              </code>
+              <div className="text-xs text-neutral-500 mt-0.5">
+                ID: <span className="font-mono">{submittedResult.id}</span> • {new Date(submittedResult.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </div>
             </div>
           </div>
+          <Link
+            href="/my-submissions"
+            className="px-3.5 py-1.5 text-xs font-medium text-neutral-900 bg-white border border-neutral-300 hover:bg-neutral-100 rounded-md transition-colors flex-shrink-0 self-start sm:self-auto shadow-xs"
+          >
+            View submissions →
+          </Link>
         </div>
       )}
 
