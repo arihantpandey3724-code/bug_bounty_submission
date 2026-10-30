@@ -28,7 +28,8 @@ async function cleanup() {
     const deletedSubs = await sql`
       DELETE FROM "RegularSubmission"
       WHERE "teamId" IN (
-        SELECT id FROM "Team" WHERE name LIKE 'SIM-Team-%' OR email LIKE '%@entropy.test'
+        SELECT id FROM "Team"
+        WHERE name LIKE 'SIM%' OR email LIKE '%entropy.test%' OR name LIKE '%Typo%'
       )
       RETURNING id;
     `;
@@ -39,14 +40,15 @@ async function cleanup() {
       UPDATE "TreasureBug"
       SET "isClaimed" = false, "claimedByTeamId" = NULL, "claimedAt" = NULL
       WHERE "claimedByTeamId" IN (
-        SELECT id FROM "Team" WHERE name LIKE 'SIM-Team-%' OR email LIKE '%@entropy.test'
+        SELECT id FROM "Team"
+        WHERE name LIKE 'SIM%' OR email LIKE '%entropy.test%' OR name LIKE '%Typo%'
       );
     `;
 
     // 3. Delete SIM teams
     const deletedTeams = await sql`
       DELETE FROM "Team"
-      WHERE name LIKE 'SIM-Team-%' OR email LIKE '%@entropy.test'
+      WHERE name LIKE 'SIM%' OR email LIKE '%entropy.test%' OR name LIKE '%Typo%'
       RETURNING id, name;
     `;
     console.log(`Deleted ${deletedTeams.length} simulated team(s).`);
