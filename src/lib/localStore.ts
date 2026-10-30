@@ -398,7 +398,8 @@ class LocalStore {
     status: "VERIFIED" | "REJECTED" | "UNVERIFIED" | "PENDING",
     matchedBugId?: string | null,
     overridePoints?: number | null,
-    judgeNotes?: string
+    judgeNotes?: string,
+    isSpeedBonus?: boolean
   ) {
     const submissions = readDiskBackups();
     const sub = submissions.find((s) => s.id === submissionId);
@@ -444,9 +445,17 @@ class LocalStore {
         isSpeed = false;
       } else if (overridePoints !== undefined && overridePoints !== null) {
         pts = overridePoints;
+        isSpeed = isSpeedBonus ?? false;
       } else if (effBugId && this.bugs.has(effBugId)) {
         const b = this.bugs.get(effBugId)!;
-        if (!b.isFirstFound) {
+        if (isSpeedBonus !== undefined) {
+          isSpeed = isSpeedBonus;
+          if (isSpeed && !b.isFirstFound) {
+            b.isFirstFound = true;
+            b.firstFoundById = sub.teamId;
+            b.firstFoundByTeam = team?.name || "Team";
+          }
+        } else if (!b.isFirstFound) {
           isSpeed = true;
           b.isFirstFound = true;
           b.firstFoundById = sub.teamId;

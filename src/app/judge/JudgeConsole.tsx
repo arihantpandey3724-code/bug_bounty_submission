@@ -27,6 +27,7 @@ export default function JudgeConsole() {
       matchedBugId: string;
       overridePoints: string;
       judgeNotes: string;
+      isSpeedBonus?: boolean;
     };
   }>({});
 
@@ -117,6 +118,7 @@ export default function JudgeConsole() {
             matchedBugId: sub.matchedBugId || "",
             overridePoints: sub.awardedPoints ? String(sub.awardedPoints) : "",
             judgeNotes: "",
+            isSpeedBonus: Boolean(sub.isSpeedBonus),
           };
         });
         setJudgeFormState(initialForm);
@@ -313,6 +315,7 @@ export default function JudgeConsole() {
       matchedBugId: "",
       overridePoints: "",
       judgeNotes: "",
+      isSpeedBonus: false,
     };
 
     try {
@@ -323,6 +326,7 @@ export default function JudgeConsole() {
           status: verdict,
           matchedBugId: form.matchedBugId || null,
           overridePoints: form.overridePoints ? Number(form.overridePoints) : null,
+          isSpeedBonus: Boolean(form.isSpeedBonus),
           judgeNotes: form.judgeNotes || undefined,
         }),
       });
@@ -642,12 +646,23 @@ export default function JudgeConsole() {
                             </label>
                             <select
                               value={form.matchedBugId}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                const newBugId = e.target.value;
+                                const bug = masterBugsData.find((b) => b.id === newBugId);
+                                const isEligible = bug ? !bug.isFirstFound : false;
+                                const base = bug ? bug.basePoints : 3;
+                                const speed = bug ? bug.speedBonusPoints : 2;
+                                const total = bug ? (isEligible ? base + speed : base) : "";
                                 setJudgeFormState((prev) => ({
                                   ...prev,
-                                  [sub.id]: { ...prev[sub.id], matchedBugId: e.target.value },
-                                }))
-                              }
+                                  [sub.id]: {
+                                    ...prev[sub.id],
+                                    matchedBugId: newBugId,
+                                    isSpeedBonus: isEligible,
+                                    overridePoints: total !== "" ? String(total) : "",
+                                  },
+                                }));
+                              }}
                               className="w-full px-2.5 py-1.5 bg-white border border-neutral-300 rounded-sm text-xs focus:outline-none"
                             >
                               <option value="">-- Select Master Bug --</option>
@@ -676,6 +691,55 @@ export default function JudgeConsole() {
                               className="w-full px-2.5 py-1.5 bg-white border border-neutral-300 rounded-sm text-xs focus:outline-none"
                             />
                           </div>
+                        </div>
+
+                        {/* Speed Bonus Toggle & Badge */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 p-2 bg-neutral-50 border border-neutral-200 rounded-sm">
+                          <label className="flex items-center space-x-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={form.isSpeedBonus ?? false}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                const bug = masterBugsData.find((b) => b.id === form.matchedBugId);
+                                const base = bug ? bug.basePoints : 3;
+                                const speed = bug ? bug.speedBonusPoints : 2;
+                                setJudgeFormState((prev) => ({
+                                  ...prev,
+                                  [sub.id]: {
+                                    ...prev[sub.id],
+                                    isSpeedBonus: checked,
+                                    overridePoints: String(base + (checked ? speed : 0)),
+                                  },
+                                }));
+                              }}
+                              className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer"
+                            />
+                            <span className="text-xs font-bold text-neutral-800 flex items-center gap-1">
+                              ⚡ Award Speed Bonus (+{(() => {
+                                const bug = masterBugsData.find((b) => b.id === form.matchedBugId);
+                                return bug ? bug.speedBonusPoints : 2;
+                              })()} pts)
+                            </span>
+                          </label>
+
+                          {(() => {
+                            const bug = masterBugsData.find((b) => b.id === form.matchedBugId);
+                            if (!bug) return null;
+                            return (
+                              <span
+                                className={`text-[11px] font-medium px-2 py-0.5 rounded ${
+                                  bug.isFirstFound
+                                    ? "bg-neutral-200 text-neutral-700"
+                                    : "bg-amber-100 text-amber-800 border border-amber-300 font-bold"
+                                }`}
+                              >
+                                {bug.isFirstFound
+                                  ? `Already claimed (${bug.firstFoundByTeam || "another team"})`
+                                  : "🔥 Unclaimed! First-finder bonus active"}
+                              </span>
+                            );
+                          })()}
                         </div>
 
                         <div>

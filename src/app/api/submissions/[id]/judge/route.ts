@@ -20,7 +20,7 @@ export async function POST(
   try {
     const submissionId = params.id;
     const body = await req.json();
-    const { status, matchedBugId, overridePoints, judgeNotes } = body;
+    const { status, matchedBugId, overridePoints, judgeNotes, isSpeedBonus } = body;
 
     const validStatuses = ["VERIFIED", "REJECTED", "UNVERIFIED", "PENDING"];
     if (!status || !validStatuses.includes(status)) {
@@ -39,6 +39,7 @@ export async function POST(
           matchedBugId: matchedBugId || null,
           overridePoints: typeof overridePoints === "number" ? overridePoints : null,
           judgeNotes: judgeNotes || undefined,
+          isSpeedBonus: typeof isSpeedBonus === "boolean" ? isSpeedBonus : undefined,
         });
 
         return NextResponse.json({
@@ -58,7 +59,8 @@ export async function POST(
       status,
       matchedBugId,
       overridePoints,
-      judgeNotes
+      judgeNotes,
+      typeof isSpeedBonus === "boolean" ? isSpeedBonus : undefined
     );
 
     return NextResponse.json({

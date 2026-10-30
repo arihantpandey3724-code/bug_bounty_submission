@@ -87,12 +87,14 @@ export async function executeJudgeVerdict({
   matchedBugId,
   overridePoints,
   judgeNotes,
+  isSpeedBonus,
 }: {
   submissionId: string;
   status: "VERIFIED" | "REJECTED" | "UNVERIFIED" | "PENDING";
   matchedBugId?: string | null;
   overridePoints?: number | null;
   judgeNotes?: string;
+  isSpeedBonus?: boolean;
 }) {
   const submission = await prisma.regularSubmission.findUnique({
     where: { id: submissionId },
@@ -179,22 +181,27 @@ export async function executeJudgeVerdict({
     isSpeed = false;
   } else if (overridePoints !== undefined && overridePoints !== null && overridePoints >= 0) {
     pointsToAward = overridePoints;
+    isSpeed = isSpeedBonus ?? false;
   } else if (effectiveBugId) {
     const bug = await prisma.masterBug.findUnique({
       where: { id: effectiveBugId },
     });
 
     if (bug) {
-      // Speed bonus if this bug hasn't been claimed yet, OR if this submission is the first one
-      if (!bug.isFirstFound) {
+      // Speed bonus if explicitly requested by Judge, OR if this bug hasn't been claimed yet
+      if (isSpeedBonus !== undefined) {
+        isSpeed = isSpeedBonus;
+      } else if (!bug.isFirstFound) {
         isSpeed = true;
       }
       pointsToAward = calculateRegularPoints(bug.category, isSpeed);
     } else {
       pointsToAward = 3; // default easy base
+      isSpeed = isSpeedBonus ?? false;
     }
   } else {
     pointsToAward = 3;
+    isSpeed = isSpeedBonus ?? false;
   }
 
   const updatedSubmission = await prisma.$transaction(async (tx) => {
