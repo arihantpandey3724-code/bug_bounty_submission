@@ -12,14 +12,12 @@ function setupDatabase() {
     return;
   }
 
-  console.log('[deploy-db] Detected external DATABASE_URL. Pushing Prisma schema to cloud database...');
+  console.log('[deploy-db] Detected external DATABASE_URL. Running safe additive provisioning (CREATE TABLE IF NOT EXISTS)...');
   try {
-    execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit' });
-    console.log('[deploy-db] Schema pushed successfully. Seeding Master Bugs and 10 Treasure Bug slots...');
-    execSync('npx tsx prisma/seed.ts', { stdio: 'inherit' });
-    console.log('[deploy-db] Master Bugs and initial records seeded successfully!');
+    execSync('npx tsx scripts/provision-neon-portal.js', { stdio: 'inherit' });
+    console.log('[deploy-db] Safe database provisioning and Master Bugs seeding completed!');
   } catch (error) {
-    console.warn('[deploy-db] Warning during DB push/seed:', error.message);
+    console.warn('[deploy-db] Warning during DB provisioning:', error.message);
   }
 }
 
