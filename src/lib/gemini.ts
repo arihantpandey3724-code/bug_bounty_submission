@@ -202,7 +202,7 @@ export async function evaluateSubmissionWithAI({
     const prompt = `You are the lead QA Judge for the Entropy 2K26 E-Commerce Bug Bounty Simulation.
 Your task is to analyze a team's bug submission against the official Master Bug catalog below and evaluate its validity.
 
-=== MASTER BUG CATALOG (55 DEFECTS) ===
+=== MASTER BUG CATALOG (${MASTER_BUGS.length} DEFECTS) ===
 ${catalogSummary}
 
 === PARTICIPANT SUBMISSION ===
@@ -213,11 +213,11 @@ ${description || "(No description provided)"}
 ${codeSnippet || "(No code snippet provided)"}
 
 === INSTRUCTIONS ===
-1. Compare the reported issue against the 55 Master Bugs.
+1. Compare the reported issue against the ${MASTER_BUGS.length} Master Bugs.
 2. Determine if this submission matches a specific Master Bug (e.g. "EASY-01", "MED-03", "HARD-01").
 3. Determine confidence score between 0.00 and 1.00:
    - REFERENCE SCREENSHOTS ARE OPTIONAL: The judges do NOT provide reference screenshots for every defect. The absence of an official ground-truth reference screenshot is completely normal and expected. When no reference screenshot is attached, evaluate authoritatively using the Master Bug Catalog specifications (Location, Expected behavior, and Actual defect behavior). Never lower confidence because an official reference image is missing.
-   - PARTICIPANT PROOF IS OPTIONAL: Screenshots and code snippets are strictly OPTIONAL for participants. If the participant's text description clearly details what occurred, where the defect happened, and reproduction steps matching one of the 55 Master Bugs, award high confidence (>= 0.85). Do NOT lower confidence or reject a submission merely because a screenshot or code snippet was not provided.
+   - PARTICIPANT PROOF IS OPTIONAL: Screenshots and code snippets are strictly OPTIONAL for participants. If the participant's text description clearly details what occurred, where the defect happened, and reproduction steps matching one of the ${MASTER_BUGS.length} Master Bugs, award high confidence (>= 0.85). Do NOT lower confidence or reject a submission merely because a screenshot or code snippet was not provided.
 4. Output strict JSON with these keys:
    {
      "matchedBugId": "EASY-01" | null,

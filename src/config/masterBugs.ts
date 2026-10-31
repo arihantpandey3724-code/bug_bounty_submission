@@ -191,6 +191,16 @@ export const MASTER_BUGS: MasterBugDef[] = [
     expected: "Switching currency to CAD should increase numeric value proportionally based on exchange rate.",
     actual: "Storefront defaults to INR (₹), but switching currency to CAD drops prices to 75% of base USD value due to an inverted 0.75x multiplier.",
   },
+  {
+    id: "EASY-19",
+    title: "Product Review Helpful and Report Button Inactivity",
+    category: "EASY",
+    basePoints: 3,
+    speedBonusPoints: 2,
+    location: "Product Reviews Section (src/components/ReviewSection.tsx)",
+    expected: "Clicking 'Helpful' should increment the helpful counter and record user feedback; clicking 'Report' should trigger a moderation flag confirmation.",
+    actual: "Both the 'Helpful' and 'Report' action buttons in the customer reviews section have no click event listeners or reactive state updates, doing nothing when clicked.",
+  },
 
   // --- Medium Defects (1 - 21) --- Base: 5 pts, Speed Bonus: 5 pts ---
   {
@@ -402,6 +412,16 @@ export const MASTER_BUGS: MasterBugDef[] = [
     location: "Catalog Infinite Scroll (src/app/s/page.tsx)",
     expected: "Scrolling down should load distinct next page items.",
     actual: "Scrolling past catalog bottom endlessly duplicates and re-renders the first few products in grid.",
+  },
+  {
+    id: "MED-22",
+    title: "Global Delivery Location Selector and Persistence Inactivity",
+    category: "MEDIUM",
+    basePoints: 5,
+    speedBonusPoints: 5,
+    location: "Header Delivery Location & Product Buy Box (src/components/Header.tsx / src/components/BuyBox.tsx)",
+    expected: "Clicking 'Deliver to' in the top header should open a delivery location modal allowing the user to select country or enter postal code to update shipping estimates.",
+    actual: "Delivery location is statically hardcoded to 'Seattle 98109' across header navigation and product pages, lacking an interactive location modal, address switching, or persistence.",
   },
 
   // --- Hard Defects (1 - 15 Active, HARD-03 Retired with Admin Removal) --- Base: 10 pts, Speed Bonus: 10 pts ---
