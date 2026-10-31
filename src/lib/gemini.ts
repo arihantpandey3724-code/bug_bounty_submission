@@ -2,10 +2,32 @@ import fs from "fs";
 import path from "path";
 import { GoogleGenAI } from "@google/genai";
 import { MASTER_BUGS } from "@/config/masterBugs";
+import { sql } from "./neonClient";
 
 const REF_DIR = path.join(process.cwd(), "data", "reference_screenshots");
 
-function getReferenceScreenshot(bugId: string): { mimeType: string; data: string } | null {
+async function getReferenceScreenshot(bugId: string): Promise<{ mimeType: string; data: string } | null> {
+  // 1. Primary: PostgreSQL cloud database (works on Vercel and across servers)
+  try {
+    const rows = await sql`
+      SELECT "imageBase64", "mimeType"
+      FROM "BugReferenceImage"
+      WHERE "bugId" = ${bugId.toUpperCase()}
+      LIMIT 1;
+    `;
+    if (rows.length > 0 && rows[0].imageBase64) {
+      const parts = rows[0].imageBase64.split(",");
+      const rawData = parts.length > 1 ? parts[1] : parts[0];
+      return {
+        mimeType: rows[0].mimeType || "image/png",
+        data: rawData,
+      };
+    }
+  } catch (err: any) {
+    console.warn("[gemini] DB reference screenshot notice:", err.message);
+  }
+
+  // 2. Fallback: Local filesystem
   try {
     const filePath = path.join(REF_DIR, `${bugId.toUpperCase()}.png`);
     if (fs.existsSync(filePath)) {
@@ -227,7 +249,7 @@ Respond ONLY with the JSON object. Do not include markdown code fence formatting
     const heuristicCandidate = heuristicEvaluate(description, codeSnippet);
     let refAttached = false;
     if (heuristicCandidate.matchedBugId) {
-      const refImage = getReferenceScreenshot(heuristicCandidate.matchedBugId);
+      const refImage = await getReferenceScreenshot(heuristicCandidate.matchedBugId);
       if (refImage) {
         contents.push({
           inlineData: refImage,
