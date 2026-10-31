@@ -3,6 +3,7 @@ import { executeJudgeVerdict } from "@/lib/scoring";
 import localStore from "@/lib/localStore";
 import { isJudgeAuthorized } from "@/lib/judgeAuth";
 import { isDbActiveSync, markDbOffline } from "@/lib/dbCircuitBreaker";
+import { invalidateCache } from "@/lib/memoryCache";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,12 @@ export async function POST(
           judgeNotes: judgeNotes || undefined,
           isSpeedBonus: typeof isSpeedBonus === "boolean" ? isSpeedBonus : undefined,
         });
+
+        invalidateCache("leaderboard");
+        invalidateCache("stats");
+        if (updated?.teamId) {
+          invalidateCache(`team_${updated.teamId}`);
+        }
 
         return NextResponse.json({
           success: true,

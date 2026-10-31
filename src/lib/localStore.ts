@@ -483,6 +483,16 @@ class LocalStore {
       }
     }
 
+    // Authoritative local reconciliation
+    if (team) {
+      const teamVerified = submissions.filter((s) => s.teamId === sub.teamId && s.status === "VERIFIED");
+      const uniqueBugs = new Set(teamVerified.map((s) => s.matchedBugId).filter(Boolean)).size;
+      const verifiedPts = teamVerified.reduce((sum, s) => sum + (s.awardedPoints || 0), 0);
+      const claimedTreasures = this.treasures.filter((t) => t.claimedByTeamId === sub.teamId).length;
+      team.totalScore = verifiedPts + (claimedTreasures * 10) + (this.milestoneAwardedTo === sub.teamId ? 10 : 0);
+      team.validBugsCount = uniqueBugs + claimedTreasures;
+    }
+
     // Re-save disk backup
     try {
       const backupPath = path.join(process.cwd(), "data", "submissions_backup.jsonl");

@@ -1,4 +1,6 @@
-import prisma from "./prisma";
+import { sql } from "./neonClient";
+import { invalidateCache } from "./memoryCache";
+import localStore from "./localStore";
 
 export const POINT_TABLE = {
   EASY: { base: 3, speed: 2, max: 5 },
@@ -10,9 +12,6 @@ export const POINT_TABLE = {
 export const MILESTONE_BONUS_POINTS = 10;
 export const MILESTONE_THRESHOLD = 10; // 10 valid bugs
 
-/**
- * Calculate standard points for a regular bug.
- */
 export function calculateRegularPoints(
   category: string,
   isSpeedBonus: boolean
@@ -23,63 +22,110 @@ export function calculateRegularPoints(
 }
 
 /**
- * Check and award Milestone Bonus (+10 pts) to the first team that reaches 10 valid bugs.
+ * Authoritative recalculation of a team's total score and valid bugs count.
+ * Calculates totalScore as:
+ *   (SUM of awardedPoints of distinct VERIFIED submissions)
+ *   + (claimed treasures * 10)
+ *   + (hasMilestoneBonus ? 10 : 0)
+ * Completely eliminates double-counting, phantom scores, and decrements properly to 0 on rejection.
  */
-export async function evaluateMilestoneBonus(teamId: string) {
+export async function recalculateTeamScore(teamId: string) {
   try {
-    const tracker = await prisma.milestoneTracker.findUnique({
-      where: { id: 1 },
-    });
+    // 1. Fetch all verified submissions for this team from PostgreSQL
+    const verifiedSubs = await sql`
+      SELECT id, "matchedBugId", "awardedPoints"
+      FROM "RegularSubmission"
+      WHERE "teamId" = ${teamId} AND status = 'VERIFIED'
+      ORDER BY "createdAt" ASC;
+    `;
 
-    // If milestone bonus already claimed by someone, exit
-    if (tracker?.awardedToTeamId) {
-      return false;
+    // Calculate distinct points per bug defect (rules specify only one award per master bug)
+    const awardedBugs = new Set<string>();
+    let submissionPoints = 0;
+    let uniqueBugCount = 0;
+
+    for (const s of verifiedSubs) {
+      if (s.matchedBugId) {
+        if (!awardedBugs.has(s.matchedBugId)) {
+          awardedBugs.add(s.matchedBugId);
+          submissionPoints += s.awardedPoints;
+          if (s.awardedPoints > 0) uniqueBugCount++;
+        } else {
+          // Zero out duplicate submissions for the same defect
+          if (s.awardedPoints > 0) {
+            await sql`
+              UPDATE "RegularSubmission"
+              SET "awardedPoints" = 0, "isSpeedBonus" = false
+              WHERE id = ${s.id};
+            `;
+          }
+        }
+      } else {
+        submissionPoints += s.awardedPoints;
+        if (s.awardedPoints > 0) uniqueBugCount++;
+      }
     }
 
-    const team = await prisma.team.findUnique({
-      where: { id: teamId },
-    });
+    // 2. Claimed treasures count
+    const treasures = await sql`
+      SELECT COUNT(*) as count
+      FROM "TreasureBug"
+      WHERE "claimedByTeamId" = ${teamId};
+    `;
+    const treasureCount = parseInt(treasures[0]?.count || 0);
+    const treasurePoints = treasureCount * 10;
 
-    if (!team) return false;
+    // 3. Milestone tracker
+    const totalBugs = uniqueBugCount + treasureCount;
+    const milestone = await sql`
+      SELECT id FROM "MilestoneTracker" WHERE "awardedToTeamId" = ${teamId} LIMIT 1;
+    `;
+    let hasMilestone = milestone.length > 0;
 
-    // Check if team has reached 10 valid bugs
-    if (team.validBugsCount >= MILESTONE_THRESHOLD && !team.hasMilestoneBonus) {
-      // Award milestone bonus
-      await prisma.$transaction([
-        prisma.team.update({
-          where: { id: teamId },
-          data: {
-            hasMilestoneBonus: true,
-            totalScore: { increment: MILESTONE_BONUS_POINTS },
-          },
-        }),
-        prisma.milestoneTracker.upsert({
-          where: { id: 1 },
-          update: {
-            awardedToTeamId: teamId,
-            awardedAt: new Date(),
-          },
-          create: {
-            id: 1,
-            awardedToTeamId: teamId,
-            awardedAt: new Date(),
-          },
-        }),
-      ]);
-
-      console.log(`[scoring] Milestone bonus (+10 pts) awarded to Team ${team.name}!`);
-      return true;
+    if (!hasMilestone && totalBugs >= MILESTONE_THRESHOLD) {
+      const claim = await sql`
+        UPDATE "MilestoneTracker"
+        SET "awardedToTeamId" = ${teamId}, "awardedAt" = NOW()
+        WHERE id = 1 AND "awardedToTeamId" IS NULL
+        RETURNING id;
+      `;
+      if (claim.length > 0) hasMilestone = true;
     }
 
-    return false;
-  } catch (err) {
-    console.error("[scoring] Error evaluating milestone bonus:", err);
-    return false;
+    const milestonePoints = hasMilestone ? 10 : 0;
+    const totalScore = Math.max(0, submissionPoints + treasurePoints + milestonePoints);
+
+    // 4. Update team record in PostgreSQL
+    await sql`
+      UPDATE "Team"
+      SET "totalScore" = ${totalScore},
+          "validBugsCount" = ${totalBugs},
+          "hasMilestoneBonus" = ${hasMilestone}
+      WHERE id = ${teamId};
+    `;
+
+    // 5. Invalidate caches so UI reflects new score instantly
+    invalidateCache("leaderboard");
+    invalidateCache("stats");
+    invalidateCache(`team_${teamId}`);
+
+    // 6. Update in-memory localStore
+    const locTeam = localStore.findTeamById(teamId);
+    if (locTeam) {
+      locTeam.totalScore = totalScore;
+      locTeam.validBugsCount = totalBugs;
+      locTeam.hasMilestoneBonus = hasMilestone;
+    }
+
+    return { totalScore, validBugsCount: totalBugs };
+  } catch (err: any) {
+    console.error("[scoring] Error in recalculateTeamScore:", err);
+    throw err;
   }
 }
 
 /**
- * Execute judge verdict for a submission.
+ * Execute judge verdict for a submission using direct HTTPS Neon SQL.
  */
 export async function executeJudgeVerdict({
   submissionId,
@@ -96,63 +142,50 @@ export async function executeJudgeVerdict({
   judgeNotes?: string;
   isSpeedBonus?: boolean;
 }) {
-  const submission = await prisma.regularSubmission.findUnique({
-    where: { id: submissionId },
-    include: { team: true, matchedBug: true },
-  });
+  const rows = await sql`
+    SELECT s.id, s."teamId", s.status, s."awardedPoints", s."isSpeedBonus", s."matchedBugId", s."llmReasoning"
+    FROM "RegularSubmission" s
+    WHERE s.id = ${submissionId}
+    LIMIT 1;
+  `;
 
-  if (!submission) {
+  if (rows.length === 0) {
     throw new Error("Submission not found");
   }
 
+  const submission = rows[0];
   const effectiveBugId = matchedBugId ?? submission.matchedBugId;
   const targetStatus = status === "PENDING" ? "UNVERIFIED" : status;
 
   if (targetStatus === "REJECTED" || targetStatus === "UNVERIFIED") {
-    // If was previously verified, subtract points
-    let pointsToSubtract = 0;
-    if (submission.status === "VERIFIED" && submission.awardedPoints > 0) {
-      pointsToSubtract = submission.awardedPoints;
+    // If this submission had claimed the first-to-find speed bonus, release the lock on the master bug
+    if (submission.isSpeedBonus && submission.matchedBugId) {
+      await sql`
+        UPDATE "MasterBug"
+        SET "isFirstFound" = false, "firstFoundById" = NULL
+        WHERE id = ${submission.matchedBugId};
+      `;
     }
 
-    const updated = await prisma.$transaction(async (tx) => {
-      if (pointsToSubtract > 0) {
-        await tx.team.update({
-          where: { id: submission.teamId },
-          data: {
-            totalScore: { decrement: pointsToSubtract },
-            validBugsCount: { decrement: 1 },
-          },
-        });
-      }
+    const reasoning = judgeNotes
+      ? `[Judge ${targetStatus === "REJECTED" ? "Rejected" : "Moved to Pending"}]: ${judgeNotes}`
+      : submission.llmReasoning;
 
-      // If this submission had claimed the first-to-find speed bonus, release the lock on the master bug
-      if (submission.isSpeedBonus && submission.matchedBugId) {
-        await tx.masterBug.update({
-          where: { id: submission.matchedBugId },
-          data: {
-            isFirstFound: false,
-            firstFoundById: null,
-          },
-        });
-      }
+    await sql`
+      UPDATE "RegularSubmission"
+      SET status = ${targetStatus},
+          "awardedPoints" = 0,
+          "isSpeedBonus" = false,
+          "judgeOverride" = true,
+          "matchedBugId" = ${effectiveBugId},
+          "llmReasoning" = ${reasoning}
+      WHERE id = ${submissionId};
+    `;
 
-      return tx.regularSubmission.update({
-        where: { id: submissionId },
-        data: {
-          status: targetStatus,
-          awardedPoints: 0,
-          isSpeedBonus: false,
-          judgeOverride: true,
-          matchedBugId: effectiveBugId,
-          llmReasoning: judgeNotes
-            ? `[Judge ${targetStatus === "REJECTED" ? "Rejected" : "Moved to Pending"}]: ${judgeNotes}`
-            : submission.llmReasoning,
-        },
-      });
-    });
+    // Recalculate team score directly in PostgreSQL
+    await recalculateTeamScore(submission.teamId);
 
-    return updated;
+    return { id: submissionId, teamId: submission.teamId, status: targetStatus, awardedPoints: 0 };
   }
 
   // --- Process VERIFIED ---
@@ -162,16 +195,13 @@ export async function executeJudgeVerdict({
   // Check if team already has another verified submission for this bug with awardedPoints > 0
   let isDuplicateAward = false;
   if (effectiveBugId) {
-    const existingAward = await prisma.regularSubmission.findFirst({
-      where: {
-        teamId: submission.teamId,
-        matchedBugId: effectiveBugId,
-        status: "VERIFIED",
-        id: { not: submissionId },
-        awardedPoints: { gt: 0 },
-      },
-    });
-    if (existingAward) {
+    const existing = await sql`
+      SELECT id FROM "RegularSubmission"
+      WHERE "teamId" = ${submission.teamId} AND "matchedBugId" = ${effectiveBugId}
+        AND status = 'VERIFIED' AND id != ${submissionId} AND "awardedPoints" > 0
+      LIMIT 1;
+    `;
+    if (existing.length > 0) {
       isDuplicateAward = true;
     }
   }
@@ -183,12 +213,12 @@ export async function executeJudgeVerdict({
     pointsToAward = overridePoints;
     isSpeed = isSpeedBonus ?? false;
   } else if (effectiveBugId) {
-    const bug = await prisma.masterBug.findUnique({
-      where: { id: effectiveBugId },
-    });
+    const bugRows = await sql`
+      SELECT id, category, "isFirstFound" FROM "MasterBug" WHERE id = ${effectiveBugId} LIMIT 1;
+    `;
 
-    if (bug) {
-      // Speed bonus if explicitly requested by Judge, OR if this bug hasn't been claimed yet
+    if (bugRows.length > 0) {
+      const bug = bugRows[0];
       if (isSpeedBonus !== undefined) {
         isSpeed = isSpeedBonus;
       } else if (!bug.isFirstFound) {
@@ -196,7 +226,7 @@ export async function executeJudgeVerdict({
       }
       pointsToAward = calculateRegularPoints(bug.category, isSpeed);
     } else {
-      pointsToAward = 3; // default easy base
+      pointsToAward = 3;
       isSpeed = isSpeedBonus ?? false;
     }
   } else {
@@ -204,49 +234,32 @@ export async function executeJudgeVerdict({
     isSpeed = isSpeedBonus ?? false;
   }
 
-  const updatedSubmission = await prisma.$transaction(async (tx) => {
-    // 1. Mark bug as first found if applicable
-    if (effectiveBugId && isSpeed) {
-      await tx.masterBug.update({
-        where: { id: effectiveBugId },
-        data: {
-          isFirstFound: true,
-          firstFoundById: submission.teamId,
-        },
-      });
-    }
+  // If first found, mark master bug
+  if (effectiveBugId && isSpeed) {
+    await sql`
+      UPDATE "MasterBug"
+      SET "isFirstFound" = true, "firstFoundById" = ${submission.teamId}
+      WHERE id = ${effectiveBugId};
+    `;
+  }
 
-    // 2. Adjust team score
-    const previousPoints = submission.status === "VERIFIED" ? submission.awardedPoints : 0;
-    const pointDifference = pointsToAward - previousPoints;
-    const countIncrement = submission.status === "VERIFIED" ? 0 : 1;
+  const reasoning = judgeNotes
+    ? `[Judge Approved]: ${judgeNotes}`
+    : submission.llmReasoning;
 
-    await tx.team.update({
-      where: { id: submission.teamId },
-      data: {
-        totalScore: { increment: pointDifference },
-        validBugsCount: { increment: countIncrement },
-      },
-    });
+  await sql`
+    UPDATE "RegularSubmission"
+    SET status = 'VERIFIED',
+        "awardedPoints" = ${pointsToAward},
+        "isSpeedBonus" = ${isSpeed},
+        "judgeOverride" = true,
+        "matchedBugId" = ${effectiveBugId},
+        "llmReasoning" = ${reasoning}
+    WHERE id = ${submissionId};
+  `;
 
-    // 3. Update submission record
-    return tx.regularSubmission.update({
-      where: { id: submissionId },
-      data: {
-        status: "VERIFIED",
-        awardedPoints: pointsToAward,
-        isSpeedBonus: isSpeed,
-        judgeOverride: true,
-        matchedBugId: effectiveBugId,
-        llmReasoning: judgeNotes
-          ? `[Judge Approved]: ${judgeNotes}`
-          : submission.llmReasoning,
-      },
-    });
-  });
+  // Authoritative team score recalculation
+  await recalculateTeamScore(submission.teamId);
 
-  // 4. Check Milestone Bonus (+10 pts) for 10 valid bugs
-  await evaluateMilestoneBonus(submission.teamId);
-
-  return updatedSubmission;
+  return { id: submissionId, teamId: submission.teamId, status: "VERIFIED", awardedPoints: pointsToAward };
 }
