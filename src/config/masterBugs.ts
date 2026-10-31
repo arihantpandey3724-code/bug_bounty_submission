@@ -295,13 +295,13 @@ export const MASTER_BUGS: MasterBugDef[] = [
   },
   {
     id: "MED-10",
-    title: "Post-Discount Tax Calculation",
+    title: "Negative Tax Calculation Inversion",
     category: "MEDIUM",
     basePoints: 5,
     speedBonusPoints: 5,
-    location: "Checkout Order Summary Tax Math (src/app/checkout/page.tsx)",
-    expected: "Tax should be computed on net discounted subtotal ((subtotal - discount) * 0.08).",
-    actual: "Tax is calculated against gross pre-discount subtotal, overcharging customer tax.",
+    location: "Checkout Order Summary Tax Math (src/app/checkout/page.tsx / Orders API)",
+    expected: "Estimated tax (8%) should be added to the order subtotal, increasing the final order total.",
+    actual: "Tax is calculated as a negative deduction (-8%), decreasing the final order total instead of increasing it.",
   },
   {
     id: "MED-11",
