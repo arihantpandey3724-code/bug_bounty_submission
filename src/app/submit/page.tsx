@@ -8,6 +8,7 @@ import Link from "next/link";
 export default function SubmitBugPage() {
   const { team, setIsAuthModalOpen } = useTeam();
 
+  const [teammateName, setTeammateName] = useState("");
   const [description, setDescription] = useState("");
   const [codeSnippet, setCodeSnippet] = useState("");
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
@@ -102,6 +103,10 @@ export default function SubmitBugPage() {
       return;
     }
 
+    const finalDescription = teammateName.trim()
+      ? `[Submitted by ${teammateName.trim()}]: ${description.trim()}`
+      : description.trim();
+
     setIsSubmitting(true);
     setErrorMsg(null);
     setSubmittedResult(null);
@@ -111,7 +116,7 @@ export default function SubmitBugPage() {
     const vaultItem = {
       id: clientVaultId,
       teamId: team.id,
-      description: description.trim(),
+      description: finalDescription,
       codeSnippet: codeSnippet.trim() || null,
       screenshotUrl: screenshotUrl || null,
       status: "CAPTURED",
@@ -131,7 +136,7 @@ export default function SubmitBugPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           teamId: team.id,
-          description: description.trim(),
+          description: finalDescription,
           codeSnippet: codeSnippet.trim() || null,
           screenshotUrl: screenshotUrl || null,
         }),
@@ -285,6 +290,21 @@ export default function SubmitBugPage() {
         onPaste={handlePaste}
         className="bg-white border border-neutral-200 rounded-md p-6 sm:p-8 space-y-6"
       >
+        {/* Teammate Name (Optional for multi-member teams) */}
+        <div>
+          <label className="block text-sm font-sans font-semibold text-neutral-800 mb-1.5 flex items-center justify-between">
+            <span>Submitted By (Teammate Name)</span>
+            <span className="text-xs text-neutral-400 font-normal">Optional &bull; Teams of up to 3 members</span>
+          </label>
+          <input
+            type="text"
+            value={teammateName}
+            onChange={(e) => setTeammateName(e.target.value)}
+            placeholder="e.g. Alice / Member 1"
+            className="w-full px-3.5 py-2 text-sm bg-neutral-50 border border-neutral-300 rounded-md focus:outline-none focus:border-neutral-900 font-sans"
+          />
+        </div>
+
         {/* Description */}
         <div>
           <label className="block text-sm font-sans font-semibold text-neutral-800 mb-1.5">
