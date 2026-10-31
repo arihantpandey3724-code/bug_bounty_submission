@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/neonClient";
-import prisma from "@/lib/prisma";
+import localStore from "@/lib/localStore";
+import { invalidateCache } from "@/lib/memoryCache";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,11 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        invalidateCache("treasures");
+        invalidateCache("leaderboard");
+        invalidateCache("stats");
+        invalidateCache("team_");
+
         return NextResponse.json({
           success: true,
           treasureId: treasure.id,
@@ -105,64 +111,27 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       );
     } catch (neonErr: any) {
-      console.warn("[api/treasures/claim] Neon HTTP fallback to Prisma:", neonErr.message);
+      console.warn("[api/treasures/claim] Neon HTTP fallback to localStore in 0ms:", neonErr.message);
 
-      const treasure = await prisma.treasureBug.findUnique({
-        where: { code: cleanCode },
-        include: { claimedByTeam: true },
-      });
-
-      if (!treasure) {
-        return NextResponse.json(
-          { error: "Invalid flag code. No matching treasure bug found." },
-          { status: 404 }
-        );
+      const claimResult = localStore.claimTreasure(teamId, cleanCode);
+      if ("success" in claimResult && claimResult.success) {
+        invalidateCache();
+        return NextResponse.json({
+          success: true,
+          treasureId: claimResult.treasureId,
+          pointsAwarded: 10,
+          message: `🎉 CONGRATULATIONS! You successfully claimed Treasure Bug #${claimResult.treasureId}! +10 points awarded to your team!`,
+        });
       }
 
-      if (treasure.isClaimed) {
-        return NextResponse.json(
-          {
-            error: `Treasure Bug #${treasure.id} has already been claimed by ${
-              treasure.claimedByTeam?.name || "another team"
-            }!`,
-          },
-          { status: 409 }
-        );
-      }
-
-      await prisma.$transaction(async (tx) => {
-        const updateResult = await tx.treasureBug.updateMany({
-          where: { id: treasure.id, isClaimed: false },
-          data: {
-            isClaimed: true,
-            claimedByTeamId: teamId,
-            claimedAt: new Date(),
-          },
-        });
-
-        if (updateResult.count === 0) {
-          throw new Error("ALREADY_CLAIMED");
-        }
-
-        await tx.team.update({
-          where: { id: teamId },
-          data: {
-            totalScore: { increment: 10 },
-            validBugsCount: { increment: 1 },
-          },
-        });
-      });
-
-      return NextResponse.json({
-        success: true,
-        treasureId: treasure.id,
-        pointsAwarded: 10,
-        message: `🎉 CONGRATULATIONS! You successfully claimed Treasure Bug #${treasure.id}! +10 points awarded to your team!`,
-      });
+      return NextResponse.json(
+        { error: claimResult.error || "Treasure claim could not be completed." },
+        { status: claimResult.error?.includes("already claimed") ? 409 : 404 }
+      );
     }
   } catch (err: any) {
     return NextResponse.json(
-      { error: "Failed to process treasure claim", details: err.message },
+      { error: "Claim processing error", details: err.message },
       { status: 500 }
     );
   }

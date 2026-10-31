@@ -53,8 +53,13 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
       fetchTeamStats(team.id);
     }, 15000);
 
+    let lastFocusFetch = 0;
     const onFocus = () => {
-      fetchTeamStats(team.id);
+      // Throttle focus refetch to at most once per 10s to avoid spamming the DB
+      if (Date.now() - lastFocusFetch > 10000) {
+        lastFocusFetch = Date.now();
+        fetchTeamStats(team.id);
+      }
     };
     window.addEventListener("focus", onFocus);
 

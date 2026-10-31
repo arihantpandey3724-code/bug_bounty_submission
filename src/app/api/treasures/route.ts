@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/neonClient";
-import prisma from "@/lib/prisma";
+import localStore from "@/lib/localStore";
 import { isJudgeAuthorized } from "@/lib/judgeAuth";
+import { getCached, setCached } from "@/lib/memoryCache";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -13,6 +14,12 @@ export async function GET(req: NextRequest) {
     Pragma: "no-cache",
     Expires: "0",
   };
+
+  const cacheKey = isJudge ? "treasures_judge" : "treasures_public";
+  const cached = getCached<any>(cacheKey, 3000);
+  if (cached) {
+    return NextResponse.json(cached, { headers });
+  }
 
   try {
     const rawTreasures = await sql`
@@ -41,30 +48,18 @@ export async function GET(req: NextRequest) {
       ...(isJudge ? { code: t.code } : {}),
     }));
 
-    return NextResponse.json({ total, claimedCount, remainingCount, treasures }, { headers });
+    const responsePayload = { total, claimedCount, remainingCount, treasures };
+    setCached(cacheKey, responsePayload);
+
+    return NextResponse.json(responsePayload, { headers });
   } catch (neonErr: any) {
-    console.warn("[api/treasures GET] Neon HTTP fallback to Prisma:", neonErr.message);
+    console.warn("[api/treasures GET] Neon HTTP fallback to localStore in 0ms:", neonErr.message);
 
-    const rawTreasures = await prisma.treasureBug.findMany({
-      orderBy: { id: "asc" },
-      include: {
-        claimedByTeam: { select: { id: true, name: true } },
-      },
-    });
-
-    const total = rawTreasures.length || 10;
-    const claimedCount = rawTreasures.filter((t) => t.isClaimed).length;
+    const localTreasures = localStore.getTreasures(isJudge);
+    const total = localTreasures.length || 10;
+    const claimedCount = localTreasures.filter((t: any) => t.isClaimed).length;
     const remainingCount = total - claimedCount;
 
-    const treasures = rawTreasures.map((t) => ({
-      id: t.id,
-      isClaimed: t.isClaimed,
-      claimedByTeamId: t.claimedByTeamId,
-      claimedByTeam: t.claimedByTeam,
-      claimedAt: t.claimedAt,
-      ...(isJudge ? { code: t.code } : {}),
-    }));
-
-    return NextResponse.json({ total, claimedCount, remainingCount, treasures }, { headers });
+    return NextResponse.json({ total, claimedCount, remainingCount, treasures: localTreasures }, { headers });
   }
 }

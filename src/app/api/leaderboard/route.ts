@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/neonClient";
-import prisma from "@/lib/prisma";
+import localStore from "@/lib/localStore";
+import { getCached, setCached } from "@/lib/memoryCache";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -12,30 +13,38 @@ export async function GET() {
     Expires: "0",
   };
 
-  try {
-    // 1. Primary High-Performance Serverless Neon Path (HTTPS, zero connection pool timeouts)
-    const teams = await sql`
-      SELECT 
-        t.id, 
-        t.name, 
-        t.email, 
-        t."totalScore", 
-        t."validBugsCount", 
-        t."hasMilestoneBonus", 
-        t."createdAt",
-        coalesce(count(distinct case when s.status = 'VERIFIED' and s."isSpeedBonus" = true then s.id end), 0)::int as "speedBonusCount",
-        coalesce(count(distinct tr.id), 0)::int as "treasuresClaimedCount",
-        coalesce(count(distinct case when s.status = 'VERIFIED' then s.id end), 0)::int as "verifiedSubmissionsCount"
-      FROM "Team" t
-      LEFT JOIN "RegularSubmission" s ON s."teamId" = t.id
-      LEFT JOIN "TreasureBug" tr ON tr."claimedByTeamId" = t.id
-      GROUP BY t.id, t.name, t.email, t."totalScore", t."validBugsCount", t."hasMilestoneBonus", t."createdAt"
-      ORDER BY t."totalScore" DESC, t."validBugsCount" DESC, t."createdAt" ASC;
-    `;
+  // 1. In-memory SWR cache (3000ms TTL) to eliminate Neon database query saturation
+  const cached = getCached<any>("leaderboard", 3000);
+  if (cached) {
+    return NextResponse.json(cached, { headers });
+  }
 
-    const milestones = await sql`
-      SELECT "awardedToTeamId", "awardedAt" FROM "MilestoneTracker" WHERE id = 1 LIMIT 1;
-    `;
+  try {
+    // 2. High-performance parallel queries via Serverless Neon HTTPS driver
+    const [teams, milestones] = await Promise.all([
+      sql`
+        SELECT 
+          t.id, 
+          t.name, 
+          t.email, 
+          t."totalScore", 
+          t."validBugsCount", 
+          t."hasMilestoneBonus", 
+          t."createdAt",
+          coalesce(count(distinct case when s.status = 'VERIFIED' and s."isSpeedBonus" = true then s.id end), 0)::int as "speedBonusCount",
+          coalesce(count(distinct tr.id), 0)::int as "treasuresClaimedCount",
+          coalesce(count(distinct case when s.status = 'VERIFIED' then s.id end), 0)::int as "verifiedSubmissionsCount"
+        FROM "Team" t
+        LEFT JOIN "RegularSubmission" s ON s."teamId" = t.id
+        LEFT JOIN "TreasureBug" tr ON tr."claimedByTeamId" = t.id
+        GROUP BY t.id, t.name, t.email, t."totalScore", t."validBugsCount", t."hasMilestoneBonus", t."createdAt"
+        ORDER BY t."totalScore" DESC, t."validBugsCount" DESC, t."createdAt" ASC;
+      `,
+      sql`
+        SELECT "awardedToTeamId", "awardedAt" FROM "MilestoneTracker" WHERE id = 1 LIMIT 1;
+      `,
+    ]);
+
     const milestone = milestones[0] || null;
 
     const leaderboard = teams.map((team: any, index: number) => ({
@@ -51,63 +60,40 @@ export async function GET() {
       verifiedSubmissionsCount: team.verifiedSubmissionsCount,
     }));
 
-    return NextResponse.json(
-      {
-        leaderboard,
-        milestoneBonusClaimedBy: milestone?.awardedToTeamId || null,
-        milestoneBonusClaimedAt: milestone?.awardedAt || null,
-        updatedAt: new Date().toISOString(),
-      },
-      { headers }
-    );
+    const responsePayload = {
+      leaderboard,
+      milestoneBonusClaimedBy: milestone?.awardedToTeamId || null,
+      milestoneBonusClaimedAt: milestone?.awardedAt || null,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setCached("leaderboard", responsePayload);
+
+    return NextResponse.json(responsePayload, { headers });
   } catch (neonErr: any) {
-    console.error("[api/leaderboard] Neon HTTP error, attempting Prisma fallback:", neonErr.message);
+    console.warn("[api/leaderboard] Neon HTTP error, falling back cleanly to localStore in 0ms:", neonErr.message);
 
-    try {
-      const teams = await prisma.team.findMany({
-        orderBy: [{ totalScore: "desc" }, { validBugsCount: "desc" }, { createdAt: "asc" }],
-        include: {
-          claimedTreasures: { select: { id: true, claimedAt: true } },
-          submissions: {
-            where: { status: "VERIFIED" },
-            select: { id: true, isSpeedBonus: true, awardedPoints: true, matchedBugId: true },
-          },
-        },
-      });
+    const localTeams = [...localStore.getTeams()].sort((a, b) => b.totalScore - a.totalScore);
+    const leaderboard = localTeams.map((team, index) => ({
+      rank: index + 1,
+      id: team.id,
+      name: team.name,
+      email: team.email,
+      totalScore: team.totalScore,
+      validBugsCount: team.validBugsCount,
+      hasMilestoneBonus: team.hasMilestoneBonus,
+      speedBonusCount: 0,
+      treasuresClaimedCount: 0,
+      verifiedSubmissionsCount: team.validBugsCount,
+    }));
 
-      const milestone = await prisma.milestoneTracker.findUnique({ where: { id: 1 } });
+    const fallbackPayload = {
+      leaderboard,
+      milestoneBonusClaimedBy: localStore.milestoneAwardedTo,
+      milestoneBonusClaimedAt: localStore.milestoneAwardedAt,
+      updatedAt: new Date().toISOString(),
+    };
 
-      const leaderboard = teams.map((team, index) => {
-        const speedBonusCount = team.submissions.filter((s) => s.isSpeedBonus).length;
-        return {
-          rank: index + 1,
-          id: team.id,
-          name: team.name,
-          email: team.email,
-          totalScore: team.totalScore,
-          validBugsCount: team.validBugsCount,
-          hasMilestoneBonus: team.hasMilestoneBonus,
-          speedBonusCount,
-          treasuresClaimedCount: team.claimedTreasures.length,
-          verifiedSubmissionsCount: team.submissions.length,
-        };
-      });
-
-      return NextResponse.json(
-        {
-          leaderboard,
-          milestoneBonusClaimedBy: milestone?.awardedToTeamId || null,
-          milestoneBonusClaimedAt: milestone?.awardedAt || null,
-          updatedAt: new Date().toISOString(),
-        },
-        { headers }
-      );
-    } catch (fallbackErr: any) {
-      console.error("[api/leaderboard] Fatal DB error:", fallbackErr.message);
-      return NextResponse.json(
-        { error: "Database temporarily busy. Please refresh.", retryable: true },
-        { status: 503, headers }
-      );
-    }
+    return NextResponse.json(fallbackPayload, { headers });
   }
 }

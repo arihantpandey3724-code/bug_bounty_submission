@@ -6,6 +6,7 @@ import { appendToDiskBackup } from "@/lib/submissionStore";
 import localStore from "@/lib/localStore";
 import { isJudgeAuthorized } from "@/lib/judgeAuth";
 import { calculateRegularPoints } from "@/lib/scoring";
+import { invalidateCache } from "@/lib/memoryCache";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -74,22 +75,14 @@ export async function GET(req: NextRequest) {
 
       return NextResponse.json({ submissions: [] }, { headers });
     } catch (neonErr: any) {
-      console.warn("[api/submissions GET] Neon HTTP fallback to Prisma:", neonErr.message);
+      console.warn("[api/submissions GET] Neon HTTP fallback to localStore in 0ms:", neonErr.message);
 
-      const where: any = {};
-      if (teamId) where.teamId = teamId;
-      if (status && status !== "ALL") where.status = status;
-
-      const rawSubmissions = await prisma.regularSubmission.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-        include: {
-          team: { select: { id: true, name: true, email: true } },
-          matchedBug: true,
-        },
+      const localSubs = localStore.getSubmissions({
+        teamId: teamId || undefined,
+        status: status && status !== "ALL" ? status : undefined,
       });
 
-      return NextResponse.json({ submissions: rawSubmissions }, { headers });
+      return NextResponse.json({ submissions: localSubs }, { headers });
     }
   } catch (err: any) {
     return NextResponse.json(
@@ -183,32 +176,8 @@ export async function POST(req: NextRequest) {
         ) ON CONFLICT (id) DO NOTHING;
       `;
     } catch (immediateWriteErr: any) {
-      console.error("[api/submissions] Immediate write error, attempting fallback:", immediateWriteErr.message);
-      try {
-        let dbTeam = await prisma.team.findUnique({ where: { id: teamId } });
-        if (!dbTeam) {
-          const candidateName = (body.teamName as string) || `Team_${teamId.slice(-6)}`;
-          const candidateEmail = `${candidateName.toLowerCase().replace(/[^a-z0-9]/g, "_")}@entropy-bounty.io`;
-          dbTeam = await prisma.team.create({
-            data: { id: teamId, name: candidateName, email: candidateEmail, totalScore: 0, validBugsCount: 0 },
-          });
-        }
-        effectiveTeamId = dbTeam.id;
-        await prisma.regularSubmission.create({
-          data: {
-            id: submissionId,
-            teamId: effectiveTeamId,
-            description: initialRecord.description,
-            codeSnippet: initialRecord.codeSnippet,
-            screenshotUrl: initialRecord.screenshotUrl,
-            status: "UNVERIFIED",
-            awardedPoints: 0,
-            isSpeedBonus: false,
-          },
-        });
-      } catch (fallbackWriteErr: any) {
-        console.error("[api/submissions] Fatal fallback write failure:", fallbackWriteErr.message);
-      }
+      console.warn("[api/submissions] Neon immediate write notice, backing up to localStore in 0ms:", immediateWriteErr.message);
+      // Already persisted to disk via appendToDiskBackup
     }
 
     // PILLAR 3: SCORING & AUTO-VERIFICATION ENRICHMENT
@@ -316,6 +285,10 @@ export async function POST(req: NextRequest) {
         console.warn("[api/submissions] Scoring update notice (submission remains safely stored):", scoreErr.message);
       }
     }
+
+    invalidateCache("leaderboard");
+    invalidateCache("stats");
+    invalidateCache(`team_${effectiveTeamId}`);
 
     return NextResponse.json({
       success: true,

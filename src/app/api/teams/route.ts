@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/neonClient";
-import prisma from "@/lib/prisma";
+import localStore from "@/lib/localStore";
+import { getCached, setCached, invalidateCache } from "@/lib/memoryCache";
 
 export const dynamic = "force-dynamic";
 
@@ -12,31 +13,42 @@ export async function GET(req: NextRequest) {
 
     try {
       if (id) {
-        const teams = await sql`
-          SELECT id, name, email, "totalScore", "validBugsCount", "hasMilestoneBonus", "createdAt"
-          FROM "Team"
-          WHERE id = ${id} LIMIT 1;
-        `;
-        if (teams.length > 0) {
-          const team = teams[0];
-          const submissions = await sql`
+        // Fast-path in-memory cache for polling teams (3s TTL)
+        const cacheKey = `team_${id}`;
+        const cached = getCached<any>(cacheKey, 3000);
+        if (cached) {
+          return NextResponse.json(cached);
+        }
+
+        const [teams, submissions, claimedTreasures] = await Promise.all([
+          sql`
+            SELECT id, name, email, "totalScore", "validBugsCount", "hasMilestoneBonus", "createdAt"
+            FROM "Team"
+            WHERE id = ${id} LIMIT 1;
+          `,
+          sql`
             SELECT id, description, "codeSnippet", "screenshotUrl", status, "awardedPoints", "isSpeedBonus", "matchedBugId", "createdAt"
             FROM "RegularSubmission"
             WHERE "teamId" = ${id}
             ORDER BY "createdAt" DESC;
-          `;
-          const claimedTreasures = await sql`
+          `,
+          sql`
             SELECT id, "claimedAt"
             FROM "TreasureBug"
             WHERE "claimedByTeamId" = ${id};
-          `;
-          return NextResponse.json({
+          `,
+        ]);
+
+        if (teams.length > 0) {
+          const payload = {
             team: {
-              ...team,
+              ...teams[0],
               submissions,
               claimedTreasures,
             },
-          });
+          };
+          setCached(cacheKey, payload);
+          return NextResponse.json(payload);
         }
         return NextResponse.json({ team: null });
       }
@@ -48,19 +60,23 @@ export async function GET(req: NextRequest) {
           FROM "Team"
           WHERE LOWER(email) = ${cleanEmail} LIMIT 1;
         `;
+
         if (teams.length > 0) {
           const team = teams[0];
-          const submissions = await sql`
-            SELECT id, description, "codeSnippet", "screenshotUrl", status, "awardedPoints", "isSpeedBonus", "matchedBugId", "createdAt"
-            FROM "RegularSubmission"
-            WHERE "teamId" = ${team.id}
-            ORDER BY "createdAt" DESC;
-          `;
-          const claimedTreasures = await sql`
-            SELECT id, "claimedAt"
-            FROM "TreasureBug"
-            WHERE "claimedByTeamId" = ${team.id};
-          `;
+          const [submissions, claimedTreasures] = await Promise.all([
+            sql`
+              SELECT id, description, "codeSnippet", "screenshotUrl", status, "awardedPoints", "isSpeedBonus", "matchedBugId", "createdAt"
+              FROM "RegularSubmission"
+              WHERE "teamId" = ${team.id}
+              ORDER BY "createdAt" DESC;
+            `,
+            sql`
+              SELECT id, "claimedAt"
+              FROM "TreasureBug"
+              WHERE "claimedByTeamId" = ${team.id};
+            `,
+          ]);
+
           return NextResponse.json({
             team: {
               ...team,
@@ -79,34 +95,28 @@ export async function GET(req: NextRequest) {
       `;
       return NextResponse.json({ teams: allTeams });
     } catch (neonErr: any) {
-      console.warn("[api/teams GET] Neon HTTP fallback to Prisma:", neonErr.message);
+      console.warn("[api/teams GET] Neon HTTP fallback to localStore in 0ms:", neonErr.message);
 
       if (id) {
-        const team = await prisma.team.findUnique({
-          where: { id },
-          include: {
-            submissions: { orderBy: { createdAt: "desc" } },
-            claimedTreasures: true,
-          },
-        });
-        return NextResponse.json({ team });
-      }
-      if (email) {
-        const team = await prisma.team.findFirst({
-          where: { email: { equals: email.trim(), mode: "insensitive" } },
-          include: {
-            submissions: { orderBy: { createdAt: "desc" } },
-            claimedTreasures: true,
-          },
-        });
-        return NextResponse.json({ team });
+        const localTeam = localStore.findTeamById(id);
+        if (localTeam) {
+          const subs = localStore.getSubmissions({ teamId: id });
+          return NextResponse.json({ team: { ...localTeam, submissions: subs, claimedTreasures: [] } });
+        }
+        return NextResponse.json({ team: null });
       }
 
-      const teams = await prisma.team.findMany({
-        orderBy: { totalScore: "desc" },
-        include: { claimedTreasures: true },
-      });
-      return NextResponse.json({ teams });
+      if (email) {
+        const cleanEmail = email.trim().toLowerCase();
+        const localTeam = localStore.findTeamByEmail(cleanEmail);
+        if (localTeam) {
+          const subs = localStore.getSubmissions({ teamId: localTeam.id });
+          return NextResponse.json({ team: { ...localTeam, submissions: subs, claimedTreasures: [] } });
+        }
+        return NextResponse.json({ team: null });
+      }
+
+      return NextResponse.json({ teams: localStore.getTeams() });
     }
   } catch (err: any) {
     return NextResponse.json(
@@ -147,63 +157,52 @@ export async function POST(req: NextRequest) {
           ON CONFLICT ("name") DO UPDATE SET "name" = EXCLUDED."name"
           RETURNING id, name, email, "totalScore", "validBugsCount", "hasMilestoneBonus", "createdAt";
         `;
+        invalidateCache("leaderboard");
       }
 
       const team = teams[0];
-      const submissions = await sql`
-        SELECT id, description, "codeSnippet", "screenshotUrl", status, "awardedPoints", "isSpeedBonus", "matchedBugId", "createdAt"
-        FROM "RegularSubmission"
-        WHERE "teamId" = ${team.id}
-        ORDER BY "createdAt" DESC;
-      `;
-      const claimedTreasures = await sql`
-        SELECT id, "claimedAt"
-        FROM "TreasureBug"
-        WHERE "claimedByTeamId" = ${team.id};
-      `;
+      const [submissions, claimedTreasures] = await Promise.all([
+        sql`
+          SELECT id, description, "codeSnippet", "screenshotUrl", status, "awardedPoints", "isSpeedBonus", "matchedBugId", "createdAt"
+          FROM "RegularSubmission"
+          WHERE "teamId" = ${team.id}
+          ORDER BY "createdAt" DESC;
+        `,
+        sql`
+          SELECT id, "claimedAt"
+          FROM "TreasureBug"
+          WHERE "claimedByTeamId" = ${team.id};
+        `,
+      ]);
 
-      return NextResponse.json({
+      const payload = {
         team: {
           ...team,
           submissions,
           claimedTreasures,
         },
         message: "Team recognized and authenticated successfully across all team devices",
-      });
+      };
+
+      setCached(`team_${team.id}`, { team: payload.team });
+
+      return NextResponse.json(payload);
     } catch (neonErr: any) {
-      console.warn("[api/teams POST] Neon HTTP fallback to Prisma:", neonErr.message);
+      console.warn("[api/teams POST] Neon HTTP fallback to localStore in 0ms:", neonErr.message);
 
-      let team = await prisma.team.findFirst({
-        where: {
-          OR: [
-            { email: { equals: cleanEmail, mode: "insensitive" } },
-            { name: { equals: cleanName, mode: "insensitive" } },
-          ],
-        },
-        include: {
-          submissions: { orderBy: { createdAt: "desc" } },
-          claimedTreasures: true,
-        },
-      });
-
-      if (!team) {
-        team = await prisma.team.create({
-          data: {
-            name: cleanName,
-            email: cleanEmail,
-            totalScore: 0,
-            validBugsCount: 0,
-            hasMilestoneBonus: false,
-          },
-          include: {
-            submissions: { orderBy: { createdAt: "desc" } },
-            claimedTreasures: true,
-          },
-        });
+      let localTeam = localStore.findTeamByEmail(cleanEmail);
+      if (!localTeam) {
+        localTeam = localStore.createTeam(cleanName, cleanEmail);
       }
 
+      const subs = localStore.getSubmissions({ teamId: localTeam.id });
+
       return NextResponse.json({
-        team,
+        team: {
+          ...localTeam,
+          submissions: subs,
+          claimedTreasures: [],
+        },
         message: "Team authenticated successfully",
       });
     }

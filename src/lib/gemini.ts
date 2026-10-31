@@ -186,7 +186,8 @@ export async function evaluateSubmissionWithAI({
 
   const apiKey = process.env.GEMINI_API_KEY;
 
-  if (!apiKey || apiKey.trim().length === 0) {
+  // Real Google AI Gemini API keys start with "AIzaSy"
+  if (!apiKey || apiKey.trim().length === 0 || !apiKey.startsWith("AIzaSy")) {
     return heuristicCandidate;
   }
 
@@ -279,7 +280,7 @@ Respond ONLY with the JSON object. Do not include markdown code fence formatting
     try {
       response = await Promise.race([
         ai.models.generateContent({
-          model: "gemini-3.8-flash",
+          model: "gemini-2.5-flash",
           contents,
         }),
         timeoutPromise,
