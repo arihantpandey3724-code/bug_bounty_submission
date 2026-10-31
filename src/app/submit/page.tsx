@@ -106,7 +106,7 @@ export default function SubmitBugPage() {
     setErrorMsg(null);
     setSubmittedResult(null);
 
-    // Client-side zero-loss vault backup
+    // Client-side zero-loss vault backup (scoped to team)
     const clientVaultId = `local-${Date.now()}`;
     const vaultItem = {
       id: clientVaultId,
@@ -119,10 +119,14 @@ export default function SubmitBugPage() {
       isSpeedBonus: false,
       createdAt: new Date().toISOString(),
     };
+    const vaultKey = `entropy_submission_vault_${team.id}`;
     try {
-      const vault = JSON.parse(localStorage.getItem("entropy_submission_vault") || "[]");
+      // Purge any legacy un-scoped vault
+      localStorage.removeItem("entropy_submission_vault");
+
+      const vault = JSON.parse(localStorage.getItem(vaultKey) || "[]");
       vault.unshift(vaultItem);
-      localStorage.setItem("entropy_submission_vault", JSON.stringify(vault.slice(0, 50)));
+      localStorage.setItem(vaultKey, JSON.stringify(vault.slice(0, 50)));
     } catch {}
 
     try {
@@ -147,14 +151,11 @@ export default function SubmitBugPage() {
       setCodeSnippet("");
       setScreenshotUrl(null);
 
-      // Update vault item with server response
+      // Once successfully committed to the database, remove the temporary client vault item
       try {
-        const vault = JSON.parse(localStorage.getItem("entropy_submission_vault") || "[]");
-        const idx = vault.findIndex((v: any) => v.id === clientVaultId);
-        if (idx >= 0 && data.submission) {
-          vault[idx] = data.submission;
-          localStorage.setItem("entropy_submission_vault", JSON.stringify(vault));
-        }
+        const vault = JSON.parse(localStorage.getItem(vaultKey) || "[]");
+        const filtered = vault.filter((v: any) => v.id !== clientVaultId);
+        localStorage.setItem(vaultKey, JSON.stringify(filtered));
       } catch {}
     } catch (err: any) {
       console.warn("Network submission failed, saved safely to local device vault:", err);

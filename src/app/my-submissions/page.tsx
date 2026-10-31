@@ -32,8 +32,16 @@ export default function MySubmissionsPage() {
   async function syncLocalVault() {
     if (!team) return;
     try {
-      const vault = JSON.parse(localStorage.getItem("entropy_submission_vault") || "[]");
-      const pendingItems = vault.filter((v: any) => typeof v.id === "string" && v.id.startsWith("local-"));
+      // Purge legacy un-scoped vault
+      try {
+        localStorage.removeItem("entropy_submission_vault");
+      } catch {}
+
+      const vaultKey = `entropy_submission_vault_${team.id}`;
+      const vault = JSON.parse(localStorage.getItem(vaultKey) || "[]");
+      const pendingItems = vault.filter(
+        (v: any) => v.teamId === team.id && typeof v.id === "string" && v.id.startsWith("local-")
+      );
       if (pendingItems.length === 0) return;
 
       setIsSyncing(true);
@@ -50,13 +58,10 @@ export default function MySubmissionsPage() {
             }),
           });
           if (res.ok) {
-            const data = await res.json();
-            const updatedVault = JSON.parse(localStorage.getItem("entropy_submission_vault") || "[]");
-            const idx = updatedVault.findIndex((x: any) => x.id === item.id);
-            if (idx >= 0 && data.submission) {
-              updatedVault[idx] = data.submission;
-              localStorage.setItem("entropy_submission_vault", JSON.stringify(updatedVault));
-            }
+            // Once saved to the database, remove the item from local pending queue
+            const updatedVault = JSON.parse(localStorage.getItem(vaultKey) || "[]");
+            const filteredVault = updatedVault.filter((x: any) => x.id !== item.id);
+            localStorage.setItem(vaultKey, JSON.stringify(filteredVault));
           }
         } catch (syncErr) {
           console.warn("Background sync retry error:", syncErr);
@@ -72,6 +77,11 @@ export default function MySubmissionsPage() {
   async function fetchSubmissions() {
     if (!team) return;
     try {
+      // Purge legacy un-scoped vault
+      try {
+        localStorage.removeItem("entropy_submission_vault");
+      } catch {}
+
       const res = await fetch(`/api/submissions?teamId=${team.id}`);
       let serverSubs: any[] = [];
       if (res.ok) {
@@ -79,11 +89,15 @@ export default function MySubmissionsPage() {
         serverSubs = data.submissions || [];
       }
 
-      // Merge with client-side vault to guarantee zero-loss UI rendering
+      // Merge ONLY pending local offline submissions for this specific team
       try {
-        const vault = JSON.parse(localStorage.getItem("entropy_submission_vault") || "[]");
+        const vaultKey = `entropy_submission_vault_${team.id}`;
+        const vault = JSON.parse(localStorage.getItem(vaultKey) || "[]");
+        const pendingItems = vault.filter(
+          (v: any) => v.teamId === team.id && typeof v.id === "string" && v.id.startsWith("local-")
+        );
         const serverIds = new Set(serverSubs.map((s: any) => s.id));
-        for (const v of vault) {
+        for (const v of pendingItems) {
           if (!serverIds.has(v.id)) {
             serverSubs.unshift(v);
             serverIds.add(v.id);
@@ -95,8 +109,10 @@ export default function MySubmissionsPage() {
     } catch (err) {
       console.warn("Failed to load submissions, falling back to local vault:", err);
       try {
-        const vault = JSON.parse(localStorage.getItem("entropy_submission_vault") || "[]");
-        setSubmissions(vault);
+        const vaultKey = `entropy_submission_vault_${team.id}`;
+        const vault = JSON.parse(localStorage.getItem(vaultKey) || "[]");
+        const teamItems = vault.filter((v: any) => v.teamId === team.id);
+        setSubmissions(teamItems);
       } catch {}
     } finally {
       setIsLoading(false);

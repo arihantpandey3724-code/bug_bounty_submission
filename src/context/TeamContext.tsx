@@ -72,6 +72,10 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
         if (data.team) {
           setTeam(data.team);
           localStorage.setItem("entropy_team_session", JSON.stringify(data.team));
+        } else {
+          // If the team was wiped from server (e.g. competition reset), cleanly reset local session
+          setTeam(null);
+          localStorage.removeItem("entropy_team_session");
         }
       }
     } catch (err) {
