@@ -48,13 +48,9 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     fetchLeaderboard();
-    window.addEventListener("focus", fetchLeaderboard);
-    if (!autoRefresh) return () => window.removeEventListener("focus", fetchLeaderboard);
-    const interval = setInterval(fetchLeaderboard, 8000);
-    return () => {
-      window.removeEventListener("focus", fetchLeaderboard);
-      clearInterval(interval);
-    };
+    if (!autoRefresh) return;
+    const interval = setInterval(fetchLeaderboard, 10000);
+    return () => clearInterval(interval);
   }, [autoRefresh]);
 
   const milestoneWinner = teams.find((t) => t.id === milestoneTeam);

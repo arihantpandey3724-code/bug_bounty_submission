@@ -108,20 +108,12 @@ export default function MySubmissionsPage() {
       fetchSubmissions();
       syncLocalVault();
 
-      // Multi-device real-time sync for teammates on multiple laptops:
-      // Poll submissions from server every 8s and immediately refresh on window focus
-      const syncAll = () => {
-        fetchSubmissions();
-        syncLocalVault();
-      };
-
-      window.addEventListener("online", syncAll);
-      window.addEventListener("focus", syncAll);
-      const interval = setInterval(syncAll, 8000);
+      // Auto-sync whenever device reconnects to Wi-Fi/Internet
+      window.addEventListener("online", syncLocalVault);
+      const interval = setInterval(syncLocalVault, 15000);
 
       return () => {
-        window.removeEventListener("online", syncAll);
-        window.removeEventListener("focus", syncAll);
+        window.removeEventListener("online", syncLocalVault);
         clearInterval(interval);
       };
     } else {
