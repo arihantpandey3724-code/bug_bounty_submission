@@ -628,7 +628,7 @@ export default function JudgeConsole() {
                             AI AUTOMATED MATCH
                           </span>
                           <span className="font-bold text-neutral-700">
-                            Confidence: {sub.llmConfidence ? `${Math.round(sub.llmConfidence * 100)}%` : "N/A"}
+                            Confidence: {typeof sub.llmConfidence === "number" && !isNaN(sub.llmConfidence) ? `${Math.round(sub.llmConfidence * 100)}%` : "N/A"}
                           </span>
                         </div>
                         <div className="text-xs font-mono font-bold text-neutral-900">

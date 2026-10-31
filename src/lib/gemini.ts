@@ -186,8 +186,15 @@ export async function evaluateSubmissionWithAI({
 
   const apiKey = process.env.GEMINI_API_KEY;
 
-  // Real Google AI Gemini API keys start with "AIzaSy"
-  if (!apiKey || apiKey.trim().length === 0 || !apiKey.startsWith("AIzaSy")) {
+  if (!apiKey || apiKey.trim().length === 0) {
+    return heuristicCandidate;
+  }
+
+  // Google AI Studio API keys start with "AIzaSy". An "AQ." prefix is an OAuth/gcloud token that Google rejects with 401.
+  if (apiKey.startsWith("AQ.")) {
+    console.warn(
+      "[gemini] Notice: GEMINI_API_KEY begins with 'AQ.' (OAuth access token), not a Google AI Studio API key (starts with 'AIzaSy'). Free Gemini keys can be generated at https://aistudio.google.com/app/apikey. Falling back to local heuristic matcher."
+    );
     return heuristicCandidate;
   }
 

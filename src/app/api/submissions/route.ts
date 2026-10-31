@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
         const rawSubmissions = await sql`
           SELECT s.id, s."teamId", s.description, s."codeSnippet", s."screenshotUrl",
                  s.status, s."awardedPoints", s."isSpeedBonus", s."matchedBugId", s."createdAt",
+                 s."llmConfidence", s."llmReasoning",
                  json_build_object('id', t.id, 'name', t.name, 'email', t.email) as team,
                  case when b.id is not null then json_build_object('title', b.title, 'category', b.category) else null end as "matchedBug"
           FROM "RegularSubmission" s
@@ -52,6 +53,7 @@ export async function GET(req: NextRequest) {
           ? await sql`
               SELECT s.id, s."teamId", s.description, s."codeSnippet", s."screenshotUrl",
                      s.status, s."awardedPoints", s."isSpeedBonus", s."matchedBugId", s."createdAt",
+                     s."llmConfidence", s."llmReasoning",
                      json_build_object('id', t.id, 'name', t.name, 'email', t.email) as team,
                      case when b.id is not null then json_build_object('title', b.title, 'category', b.category) else null end as "matchedBug"
               FROM "RegularSubmission" s
@@ -63,6 +65,7 @@ export async function GET(req: NextRequest) {
           : await sql`
               SELECT s.id, s."teamId", s.description, s."codeSnippet", s."screenshotUrl",
                      s.status, s."awardedPoints", s."isSpeedBonus", s."matchedBugId", s."createdAt",
+                     s."llmConfidence", s."llmReasoning",
                      json_build_object('id', t.id, 'name', t.name, 'email', t.email) as team,
                      case when b.id is not null then json_build_object('title', b.title, 'category', b.category) else null end as "matchedBug"
               FROM "RegularSubmission" s
@@ -284,7 +287,31 @@ export async function POST(req: NextRequest) {
       } catch (scoreErr: any) {
         console.warn("[api/submissions] Scoring update notice (submission remains safely stored):", scoreErr.message);
       }
+    } else {
+      // Unverified or below auto-verify threshold: record AI confidence and reasoning in PostgreSQL
+      try {
+        await sql`
+          UPDATE "RegularSubmission"
+          SET "matchedBugId" = ${aiResult.matchedBugId},
+              "llmConfidence" = ${aiResult.confidence},
+              "llmReasoning" = ${aiResult.reasoning}
+          WHERE id = ${submissionId};
+        `;
+      } catch (scoreErr: any) {
+        console.warn("[api/submissions] AI evaluation update notice:", scoreErr.message);
+      }
     }
+
+    // Persist enriched AI evaluation to disk backup
+    appendToDiskBackup({
+      ...initialRecord,
+      status: targetStatus,
+      matchedBugId: aiResult.matchedBugId,
+      llmConfidence: aiResult.confidence,
+      llmReasoning: aiResult.reasoning,
+      awardedPoints,
+      isSpeedBonus,
+    });
 
     invalidateCache("leaderboard");
     invalidateCache("stats");
