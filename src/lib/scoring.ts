@@ -31,13 +31,23 @@ export function calculateRegularPoints(
  */
 export async function recalculateTeamScore(teamId: string) {
   try {
-    // 1. Fetch all verified submissions for this team from PostgreSQL
-    const verifiedSubs = await sql`
-      SELECT id, "matchedBugId", "awardedPoints"
-      FROM "RegularSubmission"
-      WHERE "teamId" = ${teamId} AND status = 'VERIFIED'
-      ORDER BY "createdAt" ASC;
-    `;
+    // 1. Fetch verified submissions, treasures, and milestone concurrently for minimum latency
+    const [verifiedSubs, treasures, milestone] = await Promise.all([
+      sql`
+        SELECT id, "matchedBugId", "awardedPoints"
+        FROM "RegularSubmission"
+        WHERE "teamId" = ${teamId} AND status = 'VERIFIED'
+        ORDER BY "createdAt" ASC;
+      `,
+      sql`
+        SELECT COUNT(*) as count
+        FROM "TreasureBug"
+        WHERE "claimedByTeamId" = ${teamId};
+      `,
+      sql`
+        SELECT id FROM "MilestoneTracker" WHERE "awardedToTeamId" = ${teamId} LIMIT 1;
+      `,
+    ]);
 
     // Calculate distinct points per bug defect (rules specify only one award per master bug)
     const awardedBugs = new Set<string>();
@@ -67,19 +77,11 @@ export async function recalculateTeamScore(teamId: string) {
     }
 
     // 2. Claimed treasures count
-    const treasures = await sql`
-      SELECT COUNT(*) as count
-      FROM "TreasureBug"
-      WHERE "claimedByTeamId" = ${teamId};
-    `;
     const treasureCount = parseInt(treasures[0]?.count || 0);
     const treasurePoints = treasureCount * 10;
 
     // 3. Milestone tracker
     const totalBugs = uniqueBugCount + treasureCount;
-    const milestone = await sql`
-      SELECT id FROM "MilestoneTracker" WHERE "awardedToTeamId" = ${teamId} LIMIT 1;
-    `;
     let hasMilestone = milestone.length > 0;
 
     if (!hasMilestone && totalBugs >= MILESTONE_THRESHOLD) {
