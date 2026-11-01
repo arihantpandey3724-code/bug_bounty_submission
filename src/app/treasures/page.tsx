@@ -73,6 +73,9 @@ export default function TreasuresPage() {
 
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401) {
+          setIsAuthModalOpen(true);
+        }
         throw new Error(data.error || "Failed to redeem flag code");
       }
 

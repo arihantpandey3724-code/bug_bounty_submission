@@ -29,6 +29,15 @@ export async function POST(req: NextRequest) {
     }
 
     try {
+      // 0. Verify team exists in Neon PostgreSQL
+      const teamExists = await sql`SELECT id FROM "Team" WHERE id = ${teamId} LIMIT 1;`;
+      if (teamExists.length === 0) {
+        return NextResponse.json(
+          { error: "Team session not found or expired. Please re-enter your team name in the top right to log in." },
+          { status: 401 }
+        );
+      }
+
       // 1. Atomic Compare-And-Swap (CAS) Claim on Neon PostgreSQL
       const claimed = await sql`
         UPDATE "TreasureBug"
